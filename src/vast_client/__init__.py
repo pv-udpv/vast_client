@@ -27,6 +27,7 @@ Usage:
 from .client import VastClient
 from .parser import VastParser
 from .player import VastPlayer
+from .base_player import BaseVastPlayer
 from .tracker import VastTracker
 from .types import VastClientConfig
 from .config import PlaybackMode, InterruptionType, PlaybackSessionConfig
@@ -55,6 +56,7 @@ __all__ = [
     "VastParser",
     "VastTracker",
     "VastPlayer",
+    "BaseVastPlayer",
     # Type definitions
     "VastClientConfig",
     # Configuration
