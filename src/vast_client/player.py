@@ -1,98 +1,88 @@
-"""VAST ad player for handling playback and progress tracking."""
+"""VAST ad player for real-time playback.
+
+Real-time playback implementation using wall-clock timing via RealtimeTimeProvider.
+Inherits shared playback logic from BaseVastPlayer.
+"""
 
 import asyncio
 import time
 from typing import TYPE_CHECKING, Any
 
 from ..events import VastEvents
-from ..log_config import (
-    get_context_logger,
-    set_playback_context,
-    update_playback_progress,
-)
+from .base_player import BaseVastPlayer
+from .config import PlaybackSessionConfig
+from .time_provider import RealtimeTimeProvider, TimeProvider
+from ..log_config import update_playback_progress
 
 if TYPE_CHECKING:
     from .client import VastClient
 
 
-class VastPlayer:
-    """Handles VAST ad playback and progress tracking."""
+class VastPlayer(BaseVastPlayer):
+    """Real-time VAST ad playback using wall-clock timing.
 
-    def __init__(self, vast_client: "VastClient", ad_data: dict[str, Any]):
-        """Initialize VAST player.
+    Inherits shared playback logic from BaseVastPlayer and implements
+    real-time specific behavior using RealtimeTimeProvider for wall-clock
+    timing via time.time() and asyncio.sleep().
+
+    Features:
+    - Real-time playback with asyncio event loop
+    - Wall-clock progress tracking
+    - Standard quartile tracking (0%, 25%, 50%, 75%, 100%)
+    - Pause/resume/stop control (inherited from BaseVastPlayer)
+
+    Example:
+        >>> client = VastClient(url)
+        >>> ad_data = await client.request_ad()
+        >>> player = VastPlayer(client, ad_data)
+        >>> await player.play()  # Real-time playback loop
+    """
+
+    def __init__(
+        self,
+        vast_client: "VastClient",
+        ad_data: dict[str, Any],
+        config: PlaybackSessionConfig | None = None,
+    ):
+        """Initialize real-time VAST player.
 
         Args:
             vast_client: VastClient instance
             ad_data: Parsed VAST ad data
+            config: PlaybackSessionConfig (optional, uses default if None)
         """
-        self.vast_client = vast_client
-        self.ad_data = ad_data
-        self.is_playing = False
+        # Call parent constructor - sets up session, logging, etc.
+        super().__init__(vast_client, ad_data, config)
 
-        # Extract creative context
-        self.creative_id = self._extract_creative_id(ad_data)
-        self.creative_duration = ad_data.get("duration", 0)
-
-        # Progress tracking
-        self.playback_start_time = None
+        # Real-time specific state
+        self.playback_start_time: float | None = None
         self.current_quartile = 0  # 0=start, 1=25%, 2=50%, 3=75%, 4=100%
         self.quartile_tracked = {0: False, 1: False, 2: False, 3: False, 4: False}
 
-        # Use contextual logger
-        self.logger = get_context_logger("vast_player")
-
-        # Set playback context
-        set_playback_context(
-            creative_id=self.creative_id,
-            creative_duration=self.creative_duration,
-            playback_seconds=0,
-            progress_quartile=0.0,
-            progress_percent=0.0,
-            vast_event="player_init",
-        )
-
         self.logger.info(VastEvents.PLAYER_INITIALIZED)
 
-    def _extract_creative_id(self, ad_data: dict[str, Any]) -> str:
-        """Extract creative ID from various sources in ad_data.
-
-        Args:
-            ad_data: Parsed VAST ad data
+    async def _default_time_provider(self) -> TimeProvider:
+        """Return RealtimeTimeProvider for wall-clock timing.
 
         Returns:
-            Creative ID or 'unknown' if not found
+            RealtimeTimeProvider using time.time() and asyncio.sleep()
         """
-        creative = ad_data.get("creative", {})
-        if isinstance(creative, dict):
-            return creative.get("id") or creative.get("ad_id") or "unknown"
-        return "unknown"
-
-    def _calculate_quartile(self, current_time: int) -> tuple[int, float]:
-        """Calculate current quartile and return number and percentage.
-
-        Args:
-            current_time: Current playback time in seconds
-
-        Returns:
-            Tuple of (quartile_number, percentage)
-        """
-        if self.creative_duration <= 0:
-            return 0, 0.0
-
-        progress = current_time / self.creative_duration
-        if progress >= 1.0:
-            return 4, 100.0
-        elif progress >= 0.75:
-            return 3, 75.0
-        elif progress >= 0.5:
-            return 2, 50.0
-        elif progress >= 0.25:
-            return 1, 25.0
-        else:
-            return 0, round(progress * 100, 1)
+        return RealtimeTimeProvider()
 
     async def play(self):
-        """Start ad playback with progress tracking."""
+        """Execute real-time ad playback with progress tracking.
+
+        Implements Template Method hook for real-time specific behavior.
+        Uses wall-clock timing via asyncio.sleep(1) per iteration.
+        Inherits pause/resume/stop from BaseVastPlayer.
+        """
+        # Initialize time provider
+        await self.setup_time_provider()
+
+        if self.time_provider is None:
+            self.logger.error("Time provider initialization failed")
+            return
+
         self.is_playing = True
         self.playback_start_time = time.time()
 
@@ -106,24 +96,14 @@ class VastPlayer:
 
         self.logger.info(VastEvents.PLAYBACK_STARTED)
 
-        await self.vast_client.tracker.track_event("impression")
-        await self.vast_client.tracker.track_event("start")
-        await self.vast_client.tracker.track_event("creativeView")
+        # Send initial events (impression, start, creativeView)
+        await self._send_initial_events()
 
         if self.creative_duration == 0:
-            update_playback_progress(
-                playback_seconds=0,
-                progress_quartile=0.0,
-                progress_percent=0.0,
-                vast_event="playback_error",
-            )
-            self.logger.error(
-                "Ad duration is not specified, skipping playback",
-                error_reason="zero_duration",
-            )
-            self.is_playing = False
+            await self._handle_zero_duration()
             return
 
+        # Real-time playback loop - one iteration per second
         for i in range(self.creative_duration):
             if not self.is_playing:
                 playback_seconds = (
@@ -147,6 +127,7 @@ class VastPlayer:
             await asyncio.sleep(1)
             await self._track_progress(i + 1)
 
+        # Handle completion
         if self.is_playing:
             playback_seconds = (
                 int(time.time() - self.playback_start_time)
@@ -164,7 +145,9 @@ class VastPlayer:
             self.logger.info(
                 "Ad playback completed", total_duration=self.creative_duration
             )
+
         self.is_playing = False
+        self.session.complete(await self.time_provider.current_time())
 
     async def _track_progress(self, current_time: int):
         """Track playback progress and handle quartile events.
@@ -224,95 +207,25 @@ class VastPlayer:
                     await self.vast_client.tracker.track_event(event_name)
 
     async def pause(self):
-        """Pause ad playback."""
-        if self.is_playing:
-            self.is_playing = False
-            self._pause_start_time = time.time()  # Remember when paused
+        """Pause ad playback.
 
-            playback_seconds = (
-                int(time.time() - self.playback_start_time)
-                if self.playback_start_time
-                else 0
-            )
-            quartile_num, quartile_float = self._calculate_quartile(playback_seconds)
-            progress_percent = (
-                round((playback_seconds / self.creative_duration) * 100, 1)
-                if self.creative_duration > 0
-                else 0.0
-            )
-
-            update_playback_progress(
-                playback_seconds=playback_seconds,
-                progress_quartile=quartile_float,
-                progress_percent=progress_percent,
-                vast_event="playback_pause",
-            )
-
-            await self.vast_client.tracker.track_event("pause")
-            self.logger.info("Ad playback paused")
+        Inherited from BaseVastPlayer - common implementation for all players.
+        """
+        await super().pause()
 
     async def resume(self):
-        """Resume ad playback."""
-        if not self.is_playing:
-            self.is_playing = True
+        """Resume ad playback.
 
-            # Update start time accounting for pause duration
-            if (
-                hasattr(self, "_pause_start_time")
-                and self._pause_start_time
-                and self.playback_start_time is not None
-            ):
-                pause_duration = time.time() - self._pause_start_time
-                self.playback_start_time += pause_duration
-                self._pause_start_time = None
-
-            playback_seconds = (
-                int(time.time() - self.playback_start_time)
-                if self.playback_start_time
-                else 0
-            )
-            quartile_num, quartile_float = self._calculate_quartile(playback_seconds)
-            progress_percent = (
-                round((playback_seconds / self.creative_duration) * 100, 1)
-                if self.creative_duration > 0
-                else 0.0
-            )
-
-            update_playback_progress(
-                playback_seconds=playback_seconds,
-                progress_quartile=quartile_float,
-                progress_percent=progress_percent,
-                vast_event="playback_resume",
-            )
-
-            await self.vast_client.tracker.track_event("resume")
-            self.logger.info("Ad playback resumed")
+        Inherited from BaseVastPlayer - common implementation for all players.
+        """
+        await super().resume()
 
     async def stop(self):
-        """Stop ad playback."""
-        if self.is_playing:
-            self.is_playing = False
-            playback_seconds = (
-                int(time.time() - self.playback_start_time)
-                if self.playback_start_time
-                else 0
-            )
-            quartile_num, quartile_float = self._calculate_quartile(playback_seconds)
-            progress_percent = (
-                round((playback_seconds / self.creative_duration) * 100, 1)
-                if self.creative_duration > 0
-                else 0.0
-            )
+        """Stop ad playback.
 
-            update_playback_progress(
-                playback_seconds=playback_seconds,
-                progress_quartile=quartile_float,
-                progress_percent=progress_percent,
-                vast_event="playback_stop",
-            )
-
-            await self.vast_client.tracker.track_event("close")
-            self.logger.info("Ad playback stopped", stopped_early=True)
+        Inherited from BaseVastPlayer - common implementation for all players.
+        """
+        await super().stop()
 
 
 __all__ = ["VastPlayer"]
