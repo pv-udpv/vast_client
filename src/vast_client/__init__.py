@@ -29,6 +29,21 @@ from .parser import VastParser
 from .player import VastPlayer
 from .tracker import VastTracker
 from .types import VastClientConfig
+from .config import PlaybackMode, InterruptionType, PlaybackSessionConfig
+from .playback_session import (
+    PlaybackSession,
+    PlaybackStatus,
+    PlaybackEventType,
+    PlaybackEvent,
+    QuartileTracker,
+)
+from .time_provider import (
+    TimeProvider,
+    RealtimeTimeProvider,
+    SimulatedTimeProvider,
+    AutoDetectTimeProvider,
+    create_time_provider,
+)
 
 __version__ = "1.0.0"
 __author__ = "CTV Middleware Team"
@@ -42,6 +57,22 @@ __all__ = [
     "VastPlayer",
     # Type definitions
     "VastClientConfig",
+    # Configuration
+    "PlaybackMode",
+    "InterruptionType",
+    "PlaybackSessionConfig",
+    # Playback session tracking
+    "PlaybackSession",
+    "PlaybackStatus",
+    "PlaybackEventType",
+    "PlaybackEvent",
+    "QuartileTracker",
+    # Time providers
+    "TimeProvider",
+    "RealtimeTimeProvider",
+    "SimulatedTimeProvider",
+    "AutoDetectTimeProvider",
+    "create_time_provider",
     # Package metadata
     "__version__",
     "__author__",

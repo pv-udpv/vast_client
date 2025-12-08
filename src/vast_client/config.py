@@ -6,10 +6,28 @@ enabling provider-specific customization and publisher overrides.
 """
 
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any, Callable
 
 from ..config import get_settings
 from .context import TrackingContext
+
+
+class PlaybackMode(str, Enum):
+    """Playback mode enumeration."""
+    REAL = "real"          # Real-time playback (wall-clock)
+    HEADLESS = "headless"  # Simulated playback (virtual time)
+    AUTO = "auto"          # Auto-detect from settings
+
+
+class InterruptionType(str, Enum):
+    """Playback interruption reason enumeration."""
+    NONE = "none"
+    PAUSE = "pause"
+    STOP = "stop"
+    ERROR = "error"
+    TIMEOUT = "timeout"
+    EXCEEDED_LIMIT = "exceeded_limit"
 
 
 @dataclass
@@ -37,6 +55,79 @@ class VastParserConfig:
 
     # Publisher-specific overrides
     publisher_overrides: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class PlaybackSessionConfig:
+    """
+    Configuration for VAST ad playback sessions.
+    
+    Controls playback behavior, including mode selection (real vs. simulated),
+    interruption handling, and session persistence. Supports provider-specific
+    and publisher-specific overrides through hierarchical configuration.
+    
+    Attributes:
+        mode: Playback mode - 'real' (wall-clock), 'headless' (simulated), or 'auto' (auto-detect)
+        interruption_rules: Provider-specific interruption probabilities and timing rules
+        max_session_duration_sec: Maximum playback duration in seconds (0 = unlimited)
+        enable_auto_quartiles: Automatically track quartile events at 25/50/75 percent
+        quartile_offset_tolerance_sec: Tolerance for quartile detection (seconds)
+        headless_tick_interval_sec: Simulation tick interval for headless playback (seconds)
+        enable_session_persistence: Store playback sessions for recovery (feature-gated)
+        emit_playback_events: Emit structured playback event logs
+        log_tracking_urls: Log tracking URLs before sending
+        
+    Examples:
+        Basic real-time playback:
+        >>> config = PlaybackSessionConfig(mode=PlaybackMode.REAL)
+        
+        Headless with custom interruption rules:
+        >>> config = PlaybackSessionConfig(
+        ...     mode=PlaybackMode.HEADLESS,
+        ...     interruption_rules={
+        ...         'start': {'probability': 0.1, 'min_offset_sec': 0, 'max_offset_sec': 2},
+        ...         'midpoint': {'probability': 0.05, 'min_offset_sec': -5, 'max_offset_sec': 5}
+        ...     }
+        ... )
+        
+        Production configuration with session persistence:
+        >>> config = PlaybackSessionConfig(
+        ...     mode=PlaybackMode.AUTO,
+        ...     max_session_duration_sec=300,
+        ...     enable_session_persistence=True,
+        ...     enable_auto_quartiles=True
+        ... )
+    """
+    
+    # Playback mode selection
+    mode: PlaybackMode = PlaybackMode.REAL
+    
+    # Interruption rules (provider-specific)
+    # Structure: {event_type: {'probability': float, 'min_offset_sec': int, 'max_offset_sec': int}}
+    interruption_rules: dict[str, dict[str, Any]] = field(default_factory=lambda: {
+        'start': {'probability': 0.0, 'min_offset_sec': 0, 'max_offset_sec': 2},
+        'firstQuartile': {'probability': 0.0, 'min_offset_sec': -2, 'max_offset_sec': 2},
+        'midpoint': {'probability': 0.0, 'min_offset_sec': -2, 'max_offset_sec': 2},
+        'thirdQuartile': {'probability': 0.0, 'min_offset_sec': -2, 'max_offset_sec': 2},
+        'complete': {'probability': 0.0, 'min_offset_sec': -5, 'max_offset_sec': 0},
+    })
+    
+    # Session duration limits
+    max_session_duration_sec: int = 0  # 0 = unlimited
+    
+    # Quartile tracking options
+    enable_auto_quartiles: bool = True
+    quartile_offset_tolerance_sec: float = 1.0
+    
+    # Headless playback options
+    headless_tick_interval_sec: float = 0.1  # Simulation granularity
+    
+    # Session persistence
+    enable_session_persistence: bool = False
+    
+    # Logging and observability
+    emit_playback_events: bool = True
+    log_tracking_urls: bool = False
 
 
 @dataclass
@@ -243,6 +334,7 @@ class VastClientConfig:
     # Component configurations
     parser: VastParserConfig = field(default_factory=VastParserConfig)
     tracker: VastTrackerConfig = field(default_factory=VastTrackerConfig)
+    playback: PlaybackSessionConfig = field(default_factory=PlaybackSessionConfig)
 
     # Global options
     enable_tracking: bool = True
@@ -253,7 +345,12 @@ class VastClientConfig:
 
 
 def get_default_vast_config(provider: str = "generic") -> VastClientConfig:
-    """Get default VAST configuration for a provider."""
+    """
+    Get default VAST configuration for a provider.
+    
+    Includes provider-specific tracking macros, parser settings, and
+    playback interruption rules for headless mode simulation.
+    """
     config = VastClientConfig(provider=provider)
 
     if provider == "global":
@@ -268,6 +365,14 @@ def get_default_vast_config(provider: str = "generic") -> VastClientConfig:
         config.tracker.static_macros.update({
             "AD_SERVER": "AdStream Global",
         })
+        # Global provider has higher interruption probability
+        config.playback.interruption_rules.update({
+            'start': {'probability': 0.15, 'min_offset_sec': 0, 'max_offset_sec': 3},
+            'firstQuartile': {'probability': 0.05, 'min_offset_sec': -2, 'max_offset_sec': 2},
+            'midpoint': {'probability': 0.08, 'min_offset_sec': -3, 'max_offset_sec': 3},
+            'thirdQuartile': {'probability': 0.05, 'min_offset_sec': -2, 'max_offset_sec': 2},
+            'complete': {'probability': 0.02, 'min_offset_sec': -5, 'max_offset_sec': 0},
+        })
 
     elif provider == "tiger":
         # AdStream Tiger specific config
@@ -277,6 +382,14 @@ def get_default_vast_config(provider: str = "generic") -> VastClientConfig:
         })
         config.tracker.static_macros.update({
             "AD_SERVER": "AdStream Tiger",
+        })
+        # Tiger has moderate interruption probability
+        config.playback.interruption_rules.update({
+            'start': {'probability': 0.08, 'min_offset_sec': 0, 'max_offset_sec': 2},
+            'firstQuartile': {'probability': 0.03, 'min_offset_sec': -1, 'max_offset_sec': 1},
+            'midpoint': {'probability': 0.05, 'min_offset_sec': -2, 'max_offset_sec': 2},
+            'thirdQuartile': {'probability': 0.03, 'min_offset_sec': -1, 'max_offset_sec': 1},
+            'complete': {'probability': 0.01, 'min_offset_sec': -5, 'max_offset_sec': 0},
         })
 
     elif provider == "leto":
@@ -290,6 +403,14 @@ def get_default_vast_config(provider: str = "generic") -> VastClientConfig:
         config.tracker.static_macros.update({
             "AD_SERVER": "Leto",
         })
+        # Leto has low interruption probability
+        config.playback.interruption_rules.update({
+            'start': {'probability': 0.05, 'min_offset_sec': 0, 'max_offset_sec': 2},
+            'firstQuartile': {'probability': 0.02, 'min_offset_sec': -1, 'max_offset_sec': 1},
+            'midpoint': {'probability': 0.03, 'min_offset_sec': -1, 'max_offset_sec': 1},
+            'thirdQuartile': {'probability': 0.02, 'min_offset_sec': -1, 'max_offset_sec': 1},
+            'complete': {'probability': 0.01, 'min_offset_sec': -5, 'max_offset_sec': 0},
+        })
 
     elif provider == "yandex":
         # Yandex Direct specific config
@@ -302,6 +423,14 @@ def get_default_vast_config(provider: str = "generic") -> VastClientConfig:
         config.tracker.static_macros.update({
             "AD_SERVER": "Yandex Direct",
         })
+        # Yandex has moderate interruption probability
+        config.playback.interruption_rules.update({
+            'start': {'probability': 0.10, 'min_offset_sec': 0, 'max_offset_sec': 2},
+            'firstQuartile': {'probability': 0.04, 'min_offset_sec': -1, 'max_offset_sec': 1},
+            'midpoint': {'probability': 0.06, 'min_offset_sec': -2, 'max_offset_sec': 2},
+            'thirdQuartile': {'probability': 0.04, 'min_offset_sec': -1, 'max_offset_sec': 1},
+            'complete': {'probability': 0.02, 'min_offset_sec': -5, 'max_offset_sec': 0},
+        })
 
     elif provider == "google":
         # Google AdSense/AdExchange specific config
@@ -313,12 +442,28 @@ def get_default_vast_config(provider: str = "generic") -> VastClientConfig:
         config.tracker.static_macros.update({
             "AD_SERVER": "Google AdSense",
         })
+        # Google has high interruption probability
+        config.playback.interruption_rules.update({
+            'start': {'probability': 0.20, 'min_offset_sec': 0, 'max_offset_sec': 3},
+            'firstQuartile': {'probability': 0.08, 'min_offset_sec': -2, 'max_offset_sec': 2},
+            'midpoint': {'probability': 0.12, 'min_offset_sec': -3, 'max_offset_sec': 3},
+            'thirdQuartile': {'probability': 0.08, 'min_offset_sec': -2, 'max_offset_sec': 2},
+            'complete': {'probability': 0.03, 'min_offset_sec': -5, 'max_offset_sec': 0},
+        })
 
     elif provider == "custom":
         # Generic custom provider config
         config.tracker.macro_formats = ["[{macro}]", "${{{macro}}}", "{{{macro}}}"]
         config.tracker.static_macros.update({
             "AD_SERVER": "Custom Provider",
+        })
+        # Custom has moderate-low interruption probability
+        config.playback.interruption_rules.update({
+            'start': {'probability': 0.07, 'min_offset_sec': 0, 'max_offset_sec': 2},
+            'firstQuartile': {'probability': 0.03, 'min_offset_sec': -1, 'max_offset_sec': 1},
+            'midpoint': {'probability': 0.04, 'min_offset_sec': -1, 'max_offset_sec': 1},
+            'thirdQuartile': {'probability': 0.03, 'min_offset_sec': -1, 'max_offset_sec': 1},
+            'complete': {'probability': 0.01, 'min_offset_sec': -5, 'max_offset_sec': 0},
         })
 
     return config
@@ -385,7 +530,10 @@ def get_vast_config_from_settings() -> VastClientConfig:
 
 
 __all__ = [
+    "PlaybackMode",
+    "InterruptionType",
     "VastParserConfig",
+    "PlaybackSessionConfig",
     "VastTrackerConfig",
     "VastClientConfig",
     "get_default_vast_config",
