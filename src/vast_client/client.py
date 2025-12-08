@@ -14,10 +14,11 @@ from ..http_client_manager import (
 )
 from ..log_config import AdRequestContext, get_context_logger
 from ..routes.helpers import build_url_preserving_unicode
-from .config import VastClientConfig, VastTrackerConfig, get_default_vast_config
+from .config import VastClientConfig, VastTrackerConfig
 from .parser import VastParser
 from .player import VastPlayer
 from .tracker import VastTracker
+
 
 if TYPE_CHECKING:
     from routes.helpers import EmbedHttpClient
@@ -68,9 +69,7 @@ class VastClient:
             # Parse configuration
             self._parse_config(config_or_url, kwargs.get("embed_client"))
 
-    def _parse_config(
-        self, config_or_url, embed_client: "EmbedHttpClient | None" = None
-    ):
+    def _parse_config(self, config_or_url, embed_client: "EmbedHttpClient | None" = None):
         """Parse configuration from various sources."""
         # Priority: embed_client > config_dict > url_string
         if embed_client:
@@ -141,9 +140,7 @@ class VastClient:
         self.encoding_config = {}
         self.embed_client = None
 
-        self.logger.debug(
-            "VastClient initialized from URL string", url=self.upstream_url
-        )
+        self.logger.debug("VastClient initialized from URL string", url=self.upstream_url)
 
     def _init_from_vast_config(self, config: VastClientConfig, **kwargs):
         """Initialize from VastClientConfig."""
@@ -183,9 +180,7 @@ class VastClient:
         )
 
     @classmethod
-    def from_uri(
-        cls, uri: str, ctx: dict[str, Any] | None = None, **kwargs
-    ) -> "VastClient":
+    def from_uri(cls, uri: str, ctx: dict[str, Any] | None = None, **kwargs) -> "VastClient":
         """
         Create VastClient from URI.
 
@@ -295,9 +290,7 @@ class VastClient:
             if self.embed_client:
                 final_url = self.embed_client.build_url(params)
                 final_headers = self.embed_client.get_headers(headers)
-                self.logger.debug(
-                    "Using EmbedHttpClient for URL building", url=final_url
-                )
+                self.logger.debug("Using EmbedHttpClient for URL building", url=final_url)
             else:
                 # Merge embedded parameters and headers with passed ones
                 final_params = {**self.embedded_params, **(params or {})}
@@ -312,12 +305,8 @@ class VastClient:
 
                 # Log Cyrillic parameters for debugging
                 for key, value in final_params.items():
-                    if isinstance(value, str) and any(
-                        ord(char) > 127 for char in value
-                    ):
-                        self.logger.debug(
-                            "Cyrillic parameter detected", key=key, value=value
-                        )
+                    if isinstance(value, str) and any(ord(char) > 127 for char in value):
+                        self.logger.debug("Cyrillic parameter detected", key=key, value=value)
 
                 # Build URL preserving Unicode symbols (including Cyrillic)
                 if self.upstream_url is None:
@@ -347,9 +336,7 @@ class VastClient:
             if response.status_code == 204:
                 success = True  # 204 - valid response (no ad)
                 info_type = "no_content"  # Special marker for no ad
-                self.logger.debug(
-                    "Received 204 No Content response, no ad data available."
-                )
+                self.logger.debug("Received 204 No Content response, no ad data available.")
                 return ""
 
             response.raise_for_status()
@@ -360,6 +347,7 @@ class VastClient:
                 VastEvents.REQUEST_COMPLETED,
                 status_code=response.status_code,
                 response_length=len(response_text),
+                vast_response_preview=response_text[:500] if len(response_text) > 500 else response_text,
             )
 
             # If response contains VAST XML, parse it
@@ -379,22 +367,19 @@ class VastClient:
                 self.logger.info("Detected XML response, attempting VAST parsing")
                 try:
                     vast_data = self.parser.parse_vast(response_text)
+                    
+                    # Preserve raw VAST XML response
+                    vast_data["_raw_vast_response"] = response_text
 
                     # Create tracker if there are events to track
-                    tracking_events: dict[str, list[str]] = vast_data.get(
-                        "tracking_events", {}
-                    )
-                    tracking_events.update(
-                        {"impression": vast_data.get("impression", [])}
-                    )
+                    tracking_events: dict[str, list[str]] = vast_data.get("tracking_events", {})
+                    tracking_events.update({"impression": vast_data.get("impression", [])})
                     tracking_events.update({"error": vast_data.get("error", [])})
 
                     if tracking_events:
                         # Extract creative_id from vast_data
                         creative_data = vast_data.get("creative", {})
-                        creative_id = creative_data.get("id") or creative_data.get(
-                            "ad_id"
-                        )
+                        creative_id = creative_data.get("id") or creative_data.get("ad_id")
 
                         self.logger.info(
                             "Creating VastTracker",
@@ -410,9 +395,7 @@ class VastClient:
                             creative_id,
                         )
                     else:
-                        self.logger.debug(
-                            "No tracking events found, skipping tracker creation"
-                        )
+                        self.logger.debug("No tracking events found, skipping tracker creation")
 
                     return vast_data
                 except Exception as e:
