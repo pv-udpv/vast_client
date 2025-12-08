@@ -1,13 +1,15 @@
 """Mixins for Trackable objects providing additional functionality with robust fallbacks."""
 
 import fnmatch
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
 from datetime import datetime
+from typing import TYPE_CHECKING, Any
+
 
 if TYPE_CHECKING:
     from .trackable import TrackableEvent
 else:
     import importlib
+
     trackable_module = importlib.import_module("ctv_middleware.vast_client.trackable")
     TrackableEvent = trackable_module.TrackableEvent
 
@@ -15,41 +17,51 @@ else:
 # Fallback helper for objects that might not define extra storage utilities
 # ---------------------------------------------------------------------------
 
+
 def _ensure_extra_api(obj: Any) -> None:
     """Ensure the object has has_extra/get_extra/set_extra API."""
     if not hasattr(obj, "_extras"):
         obj._extras = {}
 
     if not hasattr(obj, "has_extra"):
+
         def has_extra(key: str) -> bool:
             return key in obj._extras
+
         obj.has_extra = has_extra  # type: ignore[attr-defined]
 
     if not hasattr(obj, "get_extra"):
+
         def get_extra(key: str, default: Any = None) -> Any:
             return obj._extras.get(key, default)
+
         obj.get_extra = get_extra  # type: ignore[attr-defined]
 
     if not hasattr(obj, "set_extra"):
+
         def set_extra(key: str, value: Any) -> None:
             obj._extras[key] = value
+
         obj.set_extra = set_extra  # type: ignore[attr-defined]
 
-def _safe_list(val: Any) -> List[Any]:
+
+def _safe_list(val: Any) -> list[Any]:
     return val if isinstance(val, list) else []
+
 
 # ---------------------------------------------------------------------------
 # Macro processing
 # ---------------------------------------------------------------------------
 
+
 class MacroMixin:
     """Mixin providing macro substitution functionality with caching."""
 
-    def apply_macros(self, macros: Dict[str, str], formats: List[str]) -> Any:
+    def apply_macros(self, macros: dict[str, str], formats: list[str]) -> Any:
         _ensure_extra_api(self)
         value = getattr(self, "value", None)
 
-        if not isinstance(value, (list, str)):
+        if not isinstance(value, list | str):
             return value
 
         cache_key = hash(frozenset(macros.items()))
@@ -65,16 +77,18 @@ class MacroMixin:
         self.set_extra("_macro_cache_key", cache_key)
         return result
 
-    def _apply_to_str(self, text: str, macros: Dict[str, str], formats: List[str]) -> str:
+    def _apply_to_str(self, text: str, macros: dict[str, str], formats: list[str]) -> str:
         for macro_key, macro_value in macros.items():
             for fmt in formats:
                 pattern = fmt.format(macro=macro_key)
                 text = text.replace(pattern, str(macro_value))
         return text
 
+
 # ---------------------------------------------------------------------------
 # State management
 # ---------------------------------------------------------------------------
+
 
 class StateMixin:
     """Mixin providing state management for tracking operations."""
@@ -109,7 +123,9 @@ class StateMixin:
         self.set_extra("last_error_at", datetime.now())
 
         error_history = _safe_list(self.get_extra("error_history", []))
-        error_history.append({"error": error, "timestamp": datetime.now(), "attempt": attempt_count})
+        error_history.append(
+            {"error": error, "timestamp": datetime.now(), "attempt": attempt_count}
+        )
         self.set_extra("error_history", error_history)
 
     def should_retry(self, max_retries: int = 3) -> bool:
@@ -142,17 +158,19 @@ class StateMixin:
         self.set_extra("response_times", [])
         self.set_extra("error_history", [])
 
+
 # ---------------------------------------------------------------------------
 # Event filtering
 # ---------------------------------------------------------------------------
+
 
 class EventFilterMixin:
     """Mixin providing glob-based event filtering capability."""
 
     def set_event_filters(
         self,
-        include: Optional[List[str]] = None,
-        exclude: Optional[List[str]] = None,
+        include: list[str] | None = None,
+        exclude: list[str] | None = None,
     ) -> None:
         if include is not None:
             self._event_include_patterns = include
@@ -165,12 +183,9 @@ class EventFilterMixin:
         for pattern in exclude_patterns:
             if fnmatch.fnmatch(event_name, pattern):
                 return False
-        for pattern in include_patterns:
-            if fnmatch.fnmatch(event_name, pattern):
-                return True
-        return False
+        return any(fnmatch.fnmatch(event_name, pattern) for pattern in include_patterns)
 
-    def filter_events(self, events: List[str]) -> List[str]:
+    def filter_events(self, events: list[str]) -> list[str]:
         return [e for e in events if self.should_log_event(e)]
 
     def get_event_filter_stats(self) -> dict[str, Any]:
@@ -182,9 +197,11 @@ class EventFilterMixin:
             "filter_active": include != ["*"] or bool(exclude),
         }
 
+
 # ---------------------------------------------------------------------------
 # Logging integration
 # ---------------------------------------------------------------------------
+
 
 class LoggingMixin(EventFilterMixin):
     """Mixin providing logging integration + event filtering."""
@@ -202,6 +219,17 @@ class LoggingMixin(EventFilterMixin):
             maybe = to_dict_fn()
             if isinstance(maybe, dict):
                 base = maybe
+        
+        # Include the URL/value in logs
+        value = getattr(self, "value", None)
+        if value:
+            # Get processed URL if macros were applied
+            processed_url = self.get_extra("_macro_cache_value") if hasattr(self, "get_extra") else None
+            if processed_url:
+                base["tracking_url"] = processed_url if isinstance(processed_url, str) else processed_url[0] if isinstance(processed_url, list) and processed_url else str(value)
+            else:
+                base["tracking_url"] = value if isinstance(value, str) else value[0] if isinstance(value, list) and value else str(value)
+        
         stats = self.get_event_filter_stats()
         if stats["filter_active"]:
             base["_event_filters"] = stats
@@ -211,9 +239,11 @@ class LoggingMixin(EventFilterMixin):
         log_method = getattr(logger, level, logger.info)
         log_method("Trackable state", **self.to_log_dict())
 
+
 # ---------------------------------------------------------------------------
 # Composite convenience class
 # ---------------------------------------------------------------------------
+
 
 class TrackableEventWithMacros(TrackableEvent, MacroMixin, StateMixin, LoggingMixin):
     """Convenience class combining TrackableEvent with all mixins."""
@@ -228,7 +258,7 @@ class TrackableEventWithMacros(TrackableEvent, MacroMixin, StateMixin, LoggingMi
 
     def __repr__(self) -> str:
         base_repr = super().__repr__()
-        capabilities: List[str] = []
+        capabilities: list[str] = []
         if hasattr(self, "apply_macros"):
             capabilities.append("macros")
         if hasattr(self, "is_tracked"):
@@ -238,6 +268,7 @@ class TrackableEventWithMacros(TrackableEvent, MacroMixin, StateMixin, LoggingMi
         if capabilities:
             return f"{base_repr[:-1]}, mixins=[{', '.join(capabilities)}])"
         return base_repr
+
 
 __all__ = [
     "MacroMixin",
