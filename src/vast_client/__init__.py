@@ -32,6 +32,7 @@ from .headless_player import HeadlessPlayer
 from .tracker import VastTracker
 from .types import VastClientConfig
 from .config import PlaybackMode, InterruptionType, PlaybackSessionConfig
+from .config_resolver import ConfigResolver
 from .playback_session import (
     PlaybackSession,
     PlaybackStatus,
@@ -65,6 +66,7 @@ __all__ = [
     "PlaybackMode",
     "InterruptionType",
     "PlaybackSessionConfig",
+    "ConfigResolver",
     # Playback session tracking
     "PlaybackSession",
     "PlaybackStatus",
