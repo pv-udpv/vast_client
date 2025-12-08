@@ -33,6 +33,12 @@ from .tracker import VastTracker
 from .types import VastClientConfig
 from .config import PlaybackMode, InterruptionType, PlaybackSessionConfig
 from .config_resolver import ConfigResolver
+from .player_factory import (
+    PlayerFactory,
+    create_player,
+    create_real_player,
+    create_headless_player,
+)
 from .playback_session import (
     PlaybackSession,
     PlaybackStatus,
@@ -67,6 +73,11 @@ __all__ = [
     "InterruptionType",
     "PlaybackSessionConfig",
     "ConfigResolver",
+    # Factory and convenience functions
+    "PlayerFactory",
+    "create_player",
+    "create_real_player",
+    "create_headless_player",
     # Playback session tracking
     "PlaybackSession",
     "PlaybackStatus",
