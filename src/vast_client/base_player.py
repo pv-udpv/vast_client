@@ -421,7 +421,7 @@ class BaseVastPlayer(ABC):
         return self.session.should_track_quartile(quartile_num)
 
     async def _record_quartile(
-        self, quartile_num: int, current_time: float, offset_sec: float
+        self, quartile_num: int, current_time: float, _offset_sec: float
     ):
         """
         Record quartile achievement.
@@ -429,7 +429,7 @@ class BaseVastPlayer(ABC):
         Args:
             quartile_num: Quartile number (0-4)
             current_time: Current timestamp
-            offset_sec: Current playback offset
+            _offset_sec: Current playback offset (unused, for future use)
         """
         self.session.mark_quartile_tracked(quartile_num, current_time)
 
@@ -442,9 +442,12 @@ class BaseVastPlayer(ABC):
         }
 
         event_name = quartile_names.get(quartile_num, "unknown")
-        if event_name != "start" and event_name != "complete":  # Don't re-track start/complete
-            if event_name not in self.vast_client.tracker.tracked_events:
-                await self.vast_client.tracker.track_event(event_name)
+        # Don't re-track start/complete and avoid duplicate tracking
+        if (
+            event_name not in ("start", "complete")
+            and event_name not in self.vast_client.tracker.tracked_events
+        ):
+            await self.vast_client.tracker.track_event(event_name)
 
         # Update context
         quartile_percent = {0: 0.0, 1: 25.0, 2: 50.0, 3: 75.0, 4: 100.0}.get(
