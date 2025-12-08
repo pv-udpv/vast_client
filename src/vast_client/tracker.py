@@ -6,13 +6,13 @@ from typing import Any
 
 import httpx
 
-from ..http_client_manager import (
+from .http_client_manager import (
     get_http_client_manager,
     get_tracking_http_client,
     record_tracking_client_request,
 )
-from ..log_config import get_context_logger
-from ..log_config.tracing import (
+from .log_config import get_context_logger
+from .log_config.tracing import (
     create_async_span,
     propagate_trace_headers,
     should_propagate_to_service,

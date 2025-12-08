@@ -1,0 +1,466 @@
+# VAST Client Configuration
+# Supports variable substitution from ad_request context using ${variable} or ${ad_request.property} syntax
+
+# Environment settings
+environment: development
+debug: true
+log_level: DEBUG
+
+# VAST Client Configuration
+vast_client:
+  enable_tracking: true
+  enable_parsing: true
+  default_provider: generic
+  default_publisher: null
+  
+  # Parser Configuration
+  parser:
+    # Standard XPath selectors
+    xpath_ad_system: ".//AdSystem"
+    xpath_ad_title: ".//AdTitle"
+    xpath_impression: ".//Impression"
+    xpath_error: ".//Error"
+    xpath_creative: ".//Creative"
+    xpath_media_files: ".//MediaFile"
+    xpath_tracking_events: ".//Tracking"
+    xpath_duration: ".//Duration"
+    xpath_extensions: ".//Extensions/Extension"
+    
+    # Custom XPath for provider-specific fields
+    custom_xpaths: {}
+    
+    # Parsing options
+    strict_xml: false
+    recover_on_error: true
+    encoding: utf-8
+    publisher_overrides: {}
+  
+  # Tracker Configuration
+  tracker:
+    # Macro formats (order matters - more specific first)
+    macro_formats:
+      - "[{macro}]"
+      - "${{{macro}}}"
+    
+    # Static macros (provider-specific)
+    static_macros: {}
+    
+    # Mapping from ad_request properties to VAST macros
+    # Supports ${ad_request.property} references
+    macro_mapping:
+      ab_uid: DEVICE_SERIAL
+      ad_place: PLACEMENT_TYPE
+      media_title: CHANNEL_NAME
+      media_tag: CHANNEL_CATEGORY
+    
+    # Tracking options
+    timeout: 5.0
+    retry_on_error: false
+    max_retries: 0
+    
+    # Context injection configuration
+    context_timeout: 5.0
+    context_max_retries: 3
+    context_retry_delay: 1.0
+    
+    # Default capabilities to apply
+    default_capabilities:
+      - macros
+      - state
+      - logging_contextual
+      - http_send_contextual
+    
+    publisher_overrides: {}
+  
+  # Playback Session Configuration
+  playback:
+    mode: real  # real, headless, auto
+    
+    # Interruption rules for headless mode simulation
+    interruption_rules:
+      start:
+        probability: 0.0
+        min_offset_sec: 0
+        max_offset_sec: 2
+      firstQuartile:
+        probability: 0.0
+        min_offset_sec: -2
+        max_offset_sec: 2
+      midpoint:
+        probability: 0.0
+        min_offset_sec: -2
+        max_offset_sec: 2
+      thirdQuartile:
+        probability: 0.0
+        min_offset_sec: -2
+        max_offset_sec: 2
+      complete:
+        probability: 0.0
+        min_offset_sec: -5
+        max_offset_sec: 0
+    
+    # Session limits
+    max_session_duration_sec: 0  # 0 = unlimited
+    
+    # Quartile tracking
+    enable_auto_quartiles: true
+    quartile_offset_tolerance_sec: 1.0
+    
+    # Headless playback
+    headless_tick_interval_sec: 0.1
+    
+    # Session persistence
+    enable_session_persistence: false
+    
+    # Logging and observability
+    emit_playback_events: true
+    log_tracking_urls: false
+
+# HTTP Client Configuration
+# Supports template variables from ad_request context
+http:
+  timeout: 30.0
+  max_connections: 100
+  max_keepalive_connections: 20
+  keepalive_expiry: 5.0
+  
+  # Default headers - supports ${ad_request.property} substitution
+  default_headers:
+    User-Agent: "${ad_request.user_agent|VAST-Client/1.0.0}"
+    Accept: "application/xml, text/xml, */*"
+    Accept-Encoding: "gzip, deflate"
+  
+  # Context-aware headers (applied when ad_request is available)
+  context_headers:
+    X-Device-Serial: "${ad_request.device_serial}"
+    X-Request-ID: "${ad_request.request_id}"
+    X-Session-ID: "${ad_request.session_id}"
+    X-User-Agent: "${ad_request.user_agent}"
+    X-Platform: "${ad_request.platform|CTV}"
+    X-App-Version: "${ad_request.app_version}"
+  
+  # Base parameters - supports template substitution
+  base_params:
+    version: "4.0"
+    device_type: "${ad_request.device_type|ctv}"
+    platform: "${ad_request.platform|ctv}"
+  
+  # Context-aware parameters
+  context_params:
+    ab_uid: "${ad_request.device_serial}"
+    session_id: "${ad_request.session_id}"
+    request_id: "${ad_request.request_id}"
+  
+  follow_redirects: true
+  verify_ssl: true
+  
+  # URL encoding configuration
+  encoding:
+    encode_plus_as_space: false
+    preserve_unicode: true
+    safe_chars: "/:?#[]@!$&'()*+,;="
+
+# Logging Configuration
+logging:
+  version: 1
+  disable_existing_loggers: false
+  
+  formatters:
+    json:
+      format: "%(message)s"
+    console:
+      format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    detailed:
+      format: "%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s"
+  
+  handlers:
+    console:
+      class: logging.StreamHandler
+      level: DEBUG
+      formatter: console
+      stream: ext://sys.stdout
+    
+    file:
+      class: logging.handlers.RotatingFileHandler
+      level: INFO
+      formatter: json
+      filename: logs/vast_client.log
+      maxBytes: 10485760  # 10MB
+      backupCount: 5
+    
+    error_file:
+      class: logging.handlers.RotatingFileHandler
+      level: ERROR
+      formatter: detailed
+      filename: logs/vast_client_errors.log
+      maxBytes: 10485760
+      backupCount: 3
+  
+  root:
+    level: INFO
+    handlers:
+      - console
+  
+  loggers:
+    vast_client:
+      level: DEBUG
+      handlers:
+        - console
+        - file
+      propagate: false
+    
+    httpx:
+      level: WARNING
+      handlers:
+        - console
+      propagate: false
+    
+    lxml:
+      level: WARNING
+      handlers:
+        - console
+      propagate: false
+
+# Provider-Specific Configurations
+providers:
+  # AdStream Global
+  global:
+    tracker:
+      macro_mapping:
+        city: CITY
+        city_code: CITY_CODE
+        device_serial: "${ad_request.device_serial}"
+      static_macros:
+        AD_SERVER: "AdStream Global"
+    
+    parser:
+      custom_xpaths:
+        city_info: ".//Extensions/Extension[@type='city']/Name"
+    
+    playback:
+      interruption_rules:
+        start:
+          probability: 0.15
+          min_offset_sec: 0
+          max_offset_sec: 3
+        firstQuartile:
+          probability: 0.05
+          min_offset_sec: -2
+          max_offset_sec: 2
+        midpoint:
+          probability: 0.08
+          min_offset_sec: -3
+          max_offset_sec: 3
+        thirdQuartile:
+          probability: 0.05
+          min_offset_sec: -2
+          max_offset_sec: 2
+        complete:
+          probability: 0.02
+          min_offset_sec: -5
+          max_offset_sec: 0
+  
+  # AdStream Tiger
+  tiger:
+    tracker:
+      macro_mapping:
+        city_name: CITY
+        city_code: CITY_CODE
+        device_serial: "${ad_request.device_serial}"
+      static_macros:
+        AD_SERVER: "AdStream Tiger"
+    
+    playback:
+      interruption_rules:
+        start:
+          probability: 0.08
+          min_offset_sec: 0
+          max_offset_sec: 2
+        firstQuartile:
+          probability: 0.03
+          min_offset_sec: -1
+          max_offset_sec: 1
+        midpoint:
+          probability: 0.05
+          min_offset_sec: -2
+          max_offset_sec: 2
+        thirdQuartile:
+          probability: 0.03
+          min_offset_sec: -1
+          max_offset_sec: 1
+        complete:
+          probability: 0.01
+          min_offset_sec: -5
+          max_offset_sec: 0
+  
+  # Leto
+  leto:
+    tracker:
+      macro_formats:
+        - "%%{macro}%%"
+        - "[{macro}]"
+      macro_mapping:
+        wl: WL
+        pad_id: PAD_ID
+        block_id: BLOCK_ID
+        device_serial: "${ad_request.device_serial}"
+      static_macros:
+        AD_SERVER: "Leto"
+    
+    playback:
+      interruption_rules:
+        start:
+          probability: 0.05
+          min_offset_sec: 0
+          max_offset_sec: 2
+        firstQuartile:
+          probability: 0.02
+          min_offset_sec: -1
+          max_offset_sec: 1
+        midpoint:
+          probability: 0.03
+          min_offset_sec: -1
+          max_offset_sec: 1
+        thirdQuartile:
+          probability: 0.02
+          min_offset_sec: -1
+          max_offset_sec: 1
+        complete:
+          probability: 0.01
+          min_offset_sec: -5
+          max_offset_sec: 0
+  
+  # Yandex Direct
+  yandex:
+    tracker:
+      macro_formats:
+        - "{macro}"
+        - "[{macro}]"
+      macro_mapping:
+        yandex_uid: YANDEX_UID
+        campaign_id: CAMPAIGN_ID
+        banner_id: BANNER_ID
+        device_serial: "${ad_request.device_serial}"
+      static_macros:
+        AD_SERVER: "Yandex Direct"
+    
+    playback:
+      interruption_rules:
+        start:
+          probability: 0.10
+          min_offset_sec: 0
+          max_offset_sec: 2
+        firstQuartile:
+          probability: 0.04
+          min_offset_sec: -1
+          max_offset_sec: 1
+        midpoint:
+          probability: 0.06
+          min_offset_sec: -2
+          max_offset_sec: 2
+        thirdQuartile:
+          probability: 0.04
+          min_offset_sec: -1
+          max_offset_sec: 1
+        complete:
+          probability: 0.02
+          min_offset_sec: -5
+          max_offset_sec: 0
+  
+  # Google AdSense/AdExchange
+  google:
+    tracker:
+      macro_formats:
+        - "%%{macro}%%"
+        - "[{macro}]"
+      macro_mapping:
+        google_gid: GOOGLE_GID
+        google_cust_params: GOOGLE_CUST_PARAMS
+        device_serial: "${ad_request.device_serial}"
+      static_macros:
+        AD_SERVER: "Google AdSense"
+    
+    playback:
+      interruption_rules:
+        start:
+          probability: 0.20
+          min_offset_sec: 0
+          max_offset_sec: 3
+        firstQuartile:
+          probability: 0.08
+          min_offset_sec: -2
+          max_offset_sec: 2
+        midpoint:
+          probability: 0.12
+          min_offset_sec: -3
+          max_offset_sec: 3
+        thirdQuartile:
+          probability: 0.08
+          min_offset_sec: -2
+          max_offset_sec: 2
+        complete:
+          probability: 0.03
+          min_offset_sec: -5
+          max_offset_sec: 0
+  
+  # Custom/Generic Provider
+  custom:
+    tracker:
+      macro_formats:
+        - "[{macro}]"
+        - "${{{macro}}}"
+        - "{{{macro}}}"
+      static_macros:
+        AD_SERVER: "Custom Provider"
+    
+    playback:
+      interruption_rules:
+        start:
+          probability: 0.07
+          min_offset_sec: 0
+          max_offset_sec: 2
+        firstQuartile:
+          probability: 0.03
+          min_offset_sec: -1
+          max_offset_sec: 1
+        midpoint:
+          probability: 0.04
+          min_offset_sec: -1
+          max_offset_sec: 1
+        thirdQuartile:
+          probability: 0.03
+          min_offset_sec: -1
+          max_offset_sec: 1
+        complete:
+          probability: 0.01
+          min_offset_sec: -5
+          max_offset_sec: 0
+
+# Template Engine Configuration
+templates:
+  # Variable syntax: ${variable} or ${ad_request.property}
+  # Default value syntax: ${variable|default_value}
+  # Examples:
+  #   ${ad_request.user_agent}
+  #   ${ad_request.device_serial|unknown}
+  #   ${platform|ctv}
+  
+  variable_pattern: '\$\{([^}|]+)(?:\|([^}]+))?\}'
+  
+  # Predefined template functions
+  functions:
+    uuid: generate_uuid
+    timestamp: current_timestamp
+    random: generate_random_string
+  
+  # Context extraction paths
+  context_paths:
+    device_serial: "ad_request.device_serial"
+    user_agent: "ad_request.user_agent"
+    request_id: "ad_request.request_id"
+    session_id: "ad_request.session_id"
+    platform: "ad_request.platform"
+    device_type: "ad_request.device_type"
+    app_version: "ad_request.app_version"
+    channel_name: "ad_request.ext.channel_to.title"
+    channel_category: "ad_request.ext.channel_to.category"

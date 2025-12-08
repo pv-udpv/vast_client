@@ -1,0 +1,43 @@
+<VAST version="2.0">
+  <Ad id="602833">
+    <Wrapper>
+      <AdSystem>Acudeo Compatible</AdSystem>
+      <VASTAdTagURI>
+      http://demo.tremormedia.com/proddev/vast/vast_inline_linear.xml
+      </VASTAdTagURI>
+      <Error>http://example.com/wrapper/error</Error>
+      <Impression>http://example.com/trackingurl/wrapper/impression</Impression>
+      <Creatives>
+        <Creative AdID="602833">
+          <Linear>
+            <TrackingEvents>
+              <Tracking event="creativeView">http://example.com/trackingurl/wrapper/creativeView</Tracking>
+              <Tracking event="start">http://example.com/trackingurl/wrapper/start</Tracking>
+              <Tracking event="midpoint">http://example.com/trackingurl/wrapper/midpoint</Tracking>
+              <Tracking event="firstQuartile">http://example.com/trackingurl/wrapper/firstQuartile</Tracking>
+              <Tracking event="thirdQuartile">http://example.com/trackingurl/wrapper/thirdQuartile</Tracking>
+              <Tracking event="complete">http://example.com/trackingurl/wrapper/complete</Tracking>
+              <Tracking event="mute">http://example.com/trackingurl/wrapper/mute</Tracking>
+              <Tracking event="unmute">http://example.com/trackingurl/wrapper/unmute</Tracking>
+              <Tracking event="pause">http://example.com/trackingurl/wrapper/pause</Tracking>
+              <Tracking event="resume">http://example.com/trackingurl/wrapper/resume</Tracking>
+              <Tracking event="fullscreen">http://example.com/trackingurl/wrapper/fullscreen</Tracking>
+            </TrackingEvents>
+          </Linear>
+          </Creative>
+        <Creative>
+          <Linear>
+            <VideoClicks>
+              <ClickTracking>http://example.com/trackingurl/wrapper/click</ClickTracking>
+            </VideoClicks>
+          </Linear>
+        </Creative>
+        <Creative AdID="602833-NonLinearTracking">
+          <NonLinearAds>
+            <TrackingEvents></TrackingEvents>
+          </NonLinearAds>
+        </Creative>
+      </Creatives>
+    </Wrapper>
+  </Ad>
+</VAST>

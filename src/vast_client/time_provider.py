@@ -10,7 +10,7 @@ import time
 from abc import ABC, abstractmethod
 from typing import Any
 
-from ..log_config import get_context_logger
+from .log_config import get_context_logger
 
 
 class TimeProvider(ABC):

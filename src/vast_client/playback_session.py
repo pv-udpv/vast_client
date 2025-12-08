@@ -12,7 +12,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from ..log_config import get_context_logger
+from .log_config import get_context_logger
 
 
 class PlaybackStatus(str, Enum):

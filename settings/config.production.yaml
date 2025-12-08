@@ -1,0 +1,34 @@
+# Production Configuration
+# Overrides settings/config.yaml for production environment
+
+environment: production
+debug: false
+log_level: INFO
+
+vast_client:
+  playback:
+    enable_session_persistence: true
+    emit_playback_events: true
+
+http:
+  timeout: 10.0
+  verify_ssl: true
+  
+  default_headers:
+    User-Agent: "${ad_request.user_agent|VAST-Client-Prod/1.0.0}"
+
+logging:
+  root:
+    level: WARNING
+    handlers:
+      - console
+      - file
+  
+  loggers:
+    vast_client:
+      level: INFO
+      handlers:
+        - console
+        - file
+        - error_file
+      propagate: false

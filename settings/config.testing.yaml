@@ -1,0 +1,35 @@
+# Testing Configuration
+# Overrides settings/config.yaml for test environment
+
+environment: testing
+debug: true
+log_level: DEBUG
+
+vast_client:
+  playback:
+    mode: headless
+    enable_session_persistence: false
+    headless_tick_interval_sec: 0.01  # Faster tests
+
+http:
+  timeout: 5.0
+  verify_ssl: false
+  
+  default_headers:
+    User-Agent: "VAST-Client-Test/1.0.0"
+
+logging:
+  root:
+    level: DEBUG
+    handlers:
+      - console
+  
+  loggers:
+    vast_client:
+      level: DEBUG
+      handlers:
+        - console
+      propagate: false
+    
+    httpx:
+      level: DEBUG

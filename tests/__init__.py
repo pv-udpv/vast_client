@@ -1,0 +1,1 @@
+"""VAST Client test suite."""

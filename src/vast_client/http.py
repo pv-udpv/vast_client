@@ -11,14 +11,14 @@ from typing import Any
 
 import httpx
 
-from ..http_client_manager import (
+from .http_client_manager import (
     get_http_client_manager,
     get_main_http_client,
     get_tracking_http_client,
     record_main_client_request,
     record_tracking_client_request,
 )
-from ..log_config import get_context_logger
+from .log_config import get_context_logger
 from .config import get_vast_http_config, get_vast_settings, get_vast_tracking_config
 
 logger = get_context_logger(__name__)

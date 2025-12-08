@@ -10,7 +10,7 @@ import asyncio
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
-from ..log_config import (
+from .log_config import (
     get_context_logger,
     set_playback_context,
     update_playback_progress,

@@ -11,8 +11,8 @@ else:
     # Runtime imports to avoid circular dependencies
     import importlib
 
-    trackable_module = importlib.import_module("ctv_middleware.vast_client.trackable")
-    mixins_module = importlib.import_module("ctv_middleware.vast_client.mixins")
+    trackable_module = importlib.import_module("vast_client.trackable")
+    mixins_module = importlib.import_module("vast_client.mixins")
     TrackableEvent = trackable_module.TrackableEvent
     MacroMixin = mixins_module.MacroMixin
     StateMixin = mixins_module.StateMixin
@@ -154,6 +154,9 @@ def with_http_send(cls: type[T]) -> type[T]:
                 url = self.value
 
             if not url:
+                error_msg = "Empty URL - no tracking URL available"
+                if "state" in getattr(self, "__capabilities__", set()):
+                    self.mark_failed(error_msg)
                 return False
 
             # Apply macros if capability exists and macros provided
@@ -254,6 +257,9 @@ def with_retry_logic(cls: type[T]) -> type[T]:
                                 url = obj.value
 
                             if not url:
+                                error_msg = "Empty URL - no tracking URL available"
+                                if "state" in getattr(obj, "__capabilities__", set()):
+                                    obj.mark_failed(error_msg)
                                 return False
 
                             # Apply macros if capability exists and macros provided
@@ -383,6 +389,11 @@ def with_http_send_contextual(cls: type[T]) -> type[T]:
                 url = self.value
 
             if not url:
+                error_msg = "Empty URL - no tracking URL available"
+                if "state" in getattr(self, "__capabilities__", set()):
+                    self.mark_failed(error_msg)
+                if logger:
+                    logger.warning("Tracking request skipped - empty URL", trackable_key=self.key)
                 return False
 
             # Apply macros
@@ -532,6 +543,11 @@ def with_retry_logic_contextual(cls: type[T]) -> type[T]:
                                 url = obj.value
 
                             if not url:
+                                error_msg = "Empty URL - no tracking URL available"
+                                if "state" in getattr(obj, "__capabilities__", set()):
+                                    obj.mark_failed(error_msg)
+                                if logger:
+                                    logger.warning("Tracking request skipped - empty URL", trackable_key=obj.key)
                                 return False
 
                             if macros and "macros" in getattr(obj, "__capabilities__", set()):

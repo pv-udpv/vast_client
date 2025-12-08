@@ -4,8 +4,8 @@ from typing import Any
 
 from lxml import etree
 
-from ..events import VastEvents
-from ..log_config import get_context_logger
+from .events import VastEvents
+from .log_config import get_context_logger
 
 
 class VastParser:

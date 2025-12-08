@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 else:
     import importlib
 
-    trackable_module = importlib.import_module("ctv_middleware.vast_client.trackable")
+    trackable_module = importlib.import_module("vast_client.trackable")
     TrackableEvent = trackable_module.TrackableEvent
 
 # ---------------------------------------------------------------------------

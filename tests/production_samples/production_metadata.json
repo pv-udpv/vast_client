@@ -1,0 +1,40 @@
+{
+  "description": "Production VAST samples from real ad servers",
+  "generated_at": "2025-12-08",
+  "providers": [
+    {
+      "name": "Adstream",
+      "url": "g.adstrm.ru",
+      "endpoint": "https://g.adstrm.ru/vast3",
+      "vast_versions": ["3.0", "4.0"],
+      "notes": "Primary CTV ad server, frequently returns 204 No Content when no ads available"
+    }
+  ],
+  "statistics": {
+    "total_requests_analyzed": 903,
+    "successful_vast_responses": 903,
+    "no_content_responses": "frequent",
+    "average_response_length": 3013,
+    "common_status_codes": [200, 204]
+  },
+  "common_characteristics": {
+    "cyrillic_parameters": true,
+    "macro_formats": ["[MACRO]", "${MACRO}"],
+    "typical_duration_seconds": [5, 10, 15, 20, 30],
+    "device_types": ["smarttv"],
+    "placement_types": ["switchroll"]
+  },
+  "extraction_info": {
+    "source": "Production logs from ~/middleware/logs/*.jsonl",
+    "log_period": "2025-12-08",
+    "anonymization": "Device IDs and personal data removed",
+    "sample_selection": "Representative samples covering various scenarios"
+  },
+  "test_coverage": {
+    "empty_responses": true,
+    "successful_parsing": true,
+    "tracking_events": true,
+    "cyrillic_handling": true,
+    "macro_substitution": true
+  }
+}

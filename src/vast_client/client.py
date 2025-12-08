@@ -5,15 +5,15 @@ from typing import TYPE_CHECKING, Any
 
 import httpx
 
-from ..events import VastEvents
-from ..http_client_manager import (
+from .events import VastEvents
+from .http_client_manager import (
     get_http_client_manager,
     get_main_http_client,
     get_tracking_http_client,
     record_main_client_request,
 )
-from ..log_config import AdRequestContext, get_context_logger
-from ..routes.helpers import build_url_preserving_unicode
+from .log_config import AdRequestContext, get_context_logger
+from .routes.helpers import build_url_preserving_unicode
 from .config import VastClientConfig, VastTrackerConfig
 from .parser import VastParser
 from .player import VastPlayer
@@ -463,7 +463,7 @@ class VastClient:
 
         self.logger.info("VastClient closed")
         # Clear playback context when closing client
-        from ..log_config import clear_playback_context
+        from .log_config import clear_playback_context
 
         clear_playback_context()
 

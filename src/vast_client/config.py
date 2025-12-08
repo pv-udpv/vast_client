@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable
 
-from ..config import get_settings
+from .settings import get_settings
 from .context import TrackingContext
 
 

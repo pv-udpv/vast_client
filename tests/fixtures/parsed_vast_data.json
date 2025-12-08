@@ -1,0 +1,48 @@
+{
+  "vast_version": "4.0",
+  "ad_system": "Test Ad Server",
+  "ad_title": "Test Advertisement",
+  "impression": [
+    "https://tracking.example.com/impression?id=12345"
+  ],
+  "error": [
+    "https://tracking.example.com/error?code=[ERRORCODE]"
+  ],
+  "creative": {
+    "id": "creative-test-001",
+    "ad_id": "ad-test-001"
+  },
+  "media_files": [
+    {
+      "url": "https://media.example.com/video_hd.mp4",
+      "delivery": "progressive",
+      "type": "video/mp4",
+      "width": "1920",
+      "height": "1080",
+      "bitrate": "2500"
+    },
+    {
+      "url": "https://media.example.com/video_sd.mp4",
+      "delivery": "progressive",
+      "type": "video/mp4",
+      "width": "1280",
+      "height": "720",
+      "bitrate": "1500"
+    }
+  ],
+  "media_url": "https://media.example.com/video_hd.mp4",
+  "tracking_events": {
+    "start": ["https://tracking.example.com/start"],
+    "firstQuartile": ["https://tracking.example.com/quartile/1"],
+    "midpoint": ["https://tracking.example.com/midpoint"],
+    "thirdQuartile": ["https://tracking.example.com/quartile/3"],
+    "complete": ["https://tracking.example.com/complete"],
+    "pause": ["https://tracking.example.com/pause"],
+    "resume": ["https://tracking.example.com/resume"],
+    "skip": ["https://tracking.example.com/skip"],
+    "mute": ["https://tracking.example.com/mute"],
+    "unmute": ["https://tracking.example.com/unmute"]
+  },
+  "extensions": {},
+  "duration": 30
+}
