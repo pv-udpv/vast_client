@@ -347,7 +347,9 @@ class VastClient:
                 VastEvents.REQUEST_COMPLETED,
                 status_code=response.status_code,
                 response_length=len(response_text),
-                vast_response_preview=response_text[:500] if len(response_text) > 500 else response_text,
+                vast_response_preview=response_text[:500]
+                if len(response_text) > 500
+                else response_text,
             )
 
             # If response contains VAST XML, parse it
@@ -367,7 +369,7 @@ class VastClient:
                 self.logger.info("Detected XML response, attempting VAST parsing")
                 try:
                     vast_data = self.parser.parse_vast(response_text)
-                    
+
                     # Preserve raw VAST XML response
                     vast_data["_raw_vast_response"] = response_text
 
@@ -471,7 +473,7 @@ class VastClient:
         """Async context manager entry."""
         # Set context variables from ad_request if not already set
         if self.ad_request:
-            self._context_manager = AdRequestContext(self.ad_request)
+            self._context_manager = AdRequestContext(**self.ad_request)
             self._context_manager.__enter__()
         return self
 
