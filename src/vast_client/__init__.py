@@ -28,6 +28,7 @@ from .client import VastClient
 from .parser import VastParser
 from .player import VastPlayer
 from .base_player import BaseVastPlayer
+from .headless_player import HeadlessPlayer
 from .tracker import VastTracker
 from .types import VastClientConfig
 from .config import PlaybackMode, InterruptionType, PlaybackSessionConfig
@@ -57,6 +58,7 @@ __all__ = [
     "VastTracker",
     "VastPlayer",
     "BaseVastPlayer",
+    "HeadlessPlayer",
     # Type definitions
     "VastClientConfig",
     # Configuration
