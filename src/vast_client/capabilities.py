@@ -1,27 +1,29 @@
 """Capability decorators for composing Trackable functionality."""
 
 import asyncio
-from functools import wraps
-from typing import Type, TypeVar, TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeVar
+
 
 if TYPE_CHECKING:
+    from .mixins import EventFilterMixin, LoggingMixin, MacroMixin, StateMixin
     from .trackable import TrackableEvent
-    from .mixins import MacroMixin, StateMixin, LoggingMixin, EventFilterMixin
 else:
     # Runtime imports to avoid circular dependencies
     import importlib
-    trackable_module = importlib.import_module('ctv_middleware.vast_client.trackable')
-    mixins_module = importlib.import_module('ctv_middleware.vast_client.mixins')
+
+    trackable_module = importlib.import_module("ctv_middleware.vast_client.trackable")
+    mixins_module = importlib.import_module("ctv_middleware.vast_client.mixins")
     TrackableEvent = trackable_module.TrackableEvent
     MacroMixin = mixins_module.MacroMixin
     StateMixin = mixins_module.StateMixin
     LoggingMixin = mixins_module.LoggingMixin
     EventFilterMixin = mixins_module.EventFilterMixin
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 # Import context for dependency injection
 from .context import get_tracking_context
+
 
 def _add_capability(cls, name: str) -> None:
     """Safely register a capability on the class without triggering static analyzer errors."""
@@ -30,32 +32,39 @@ def _add_capability(cls, name: str) -> None:
         caps = set()
     if name not in caps:
         caps.add(name)
-    setattr(cls, "__capabilities__", caps)
+    cls.__capabilities__ = caps
 
-def with_macros(cls: Type[T]) -> Type[T]:
+
+def with_macros(cls: type[T]) -> type[T]:
     """Add macro processing capability to Trackable class.
 
     Injects MacroMixin methods: apply_macros, _apply_to_str
     """
     # Inject MacroMixin methods
-    for attr in ['apply_macros', '_apply_to_str']:
+    for attr in ["apply_macros", "_apply_to_str"]:
         if not hasattr(cls, attr):  # Don't override existing methods
             setattr(cls, attr, getattr(MacroMixin, attr))
 
     # Mark capability
-    _add_capability(cls, 'macros')
+    _add_capability(cls, "macros")
 
     return cls
 
-def with_state(cls: Type[T]) -> Type[T]:
+
+def with_state(cls: type[T]) -> type[T]:
     """Add state management capability to Trackable class.
 
     Injects StateMixin methods: is_tracked, mark_tracked, mark_failed, etc.
     """
     # Inject StateMixin methods
     state_methods = [
-        'is_tracked', 'mark_tracked', 'mark_failed', 'should_retry',
-        'get_avg_response_time', 'get_last_error', 'reset_state'
+        "is_tracked",
+        "mark_tracked",
+        "mark_failed",
+        "should_retry",
+        "get_avg_response_time",
+        "get_last_error",
+        "reset_state",
     ]
 
     for attr in state_methods:
@@ -63,37 +72,39 @@ def with_state(cls: Type[T]) -> Type[T]:
             setattr(cls, attr, getattr(StateMixin, attr))
 
     # Mark capability
-    _add_capability(cls, 'state')
+    _add_capability(cls, "state")
 
     return cls
 
-def with_event_filtering(cls: Type[T]) -> Type[T]:
+
+def with_event_filtering(cls: type[T]) -> type[T]:
     """Add event filtering capability to Trackable class.
 
     Injects EventFilterMixin methods: set_event_filters, should_log_event,
     filter_events, get_event_filter_stats
     """
     filter_methods = [
-        'set_event_filters',
-        'should_log_event',
-        'filter_events',
-        'get_event_filter_stats'
+        "set_event_filters",
+        "should_log_event",
+        "filter_events",
+        "get_event_filter_stats",
     ]
     for attr in filter_methods:
         if not hasattr(cls, attr):
             setattr(cls, attr, getattr(EventFilterMixin, attr))
 
     # Initialize default patterns if not present
-    if not hasattr(cls, '_event_include_patterns'):
-        setattr(cls, '_event_include_patterns', ["*"])
-    if not hasattr(cls, '_event_exclude_patterns'):
-        setattr(cls, '_event_exclude_patterns', [])
+    if not hasattr(cls, "_event_include_patterns"):
+        cls._event_include_patterns = ["*"]
+    if not hasattr(cls, "_event_exclude_patterns"):
+        cls._event_exclude_patterns = []
 
-    _add_capability(cls, 'event_filtering')
+    _add_capability(cls, "event_filtering")
 
     return cls
 
-def with_logging(cls: Type[T]) -> Type[T]:
+
+def with_logging(cls: type[T]) -> type[T]:
     """Add logging capability (with event filtering) to Trackable class.
 
     Injects LoggingMixin methods: to_log_dict, log_state, log_event
@@ -102,19 +113,21 @@ def with_logging(cls: Type[T]) -> Type[T]:
     # Ensure event filtering first
     cls = with_event_filtering(cls)
 
-    for attr in ['to_log_dict', 'log_state', 'log_event']:
+    for attr in ["to_log_dict", "log_state", "log_event"]:
         if not hasattr(cls, attr):
             setattr(cls, attr, getattr(LoggingMixin, attr))
 
-    _add_capability(cls, 'logging')
+    _add_capability(cls, "logging")
 
     return cls
 
-def with_http_send(cls: Type[T]) -> Type[T]:
+
+def with_http_send(cls: type[T]) -> type[T]:
     """Add HTTP send capability to Trackable class.
 
     Injects send_with method for HTTP requests with context injection support.
     """
+
     async def send_with(self, client, macros=None, **context):
         """Send tracking request using HTTP client with optional context injection.
 
@@ -130,6 +143,9 @@ def with_http_send(cls: Type[T]) -> Type[T]:
         Returns:
             bool: True if successful, False otherwise
         """
+        status_code = None
+        error_msg = None
+        
         try:
             # Get URL from value
             if isinstance(self.value, list):
@@ -141,8 +157,8 @@ def with_http_send(cls: Type[T]) -> Type[T]:
                 return False
 
             # Apply macros if capability exists and macros provided
-            if macros and 'macros' in getattr(self, '__capabilities__', set()):
-                url = self.apply_macros(macros, ['[{macro}]', '${{{macro}}}'])
+            if macros and "macros" in getattr(self, "__capabilities__", set()):
+                url = self.apply_macros(macros, ["[{macro}]", "${{{macro}}}"])
                 if isinstance(url, list):
                     url = url[0]
 
@@ -150,55 +166,67 @@ def with_http_send(cls: Type[T]) -> Type[T]:
             request_kwargs = {}
 
             # Extract context parameters
-            headers = context.get('headers', {})
-            params = context.get('params', {})
-            timeout = context.get('timeout')
+            headers = context.get("headers", {})
+            params = context.get("params", {})
+            timeout = context.get("timeout")
 
             # Add headers if provided
             if headers:
-                request_kwargs['headers'] = headers
+                request_kwargs["headers"] = headers
 
             # Add query parameters if provided
             if params:
-                request_kwargs['params'] = params
+                request_kwargs["params"] = params
 
             # Add timeout if provided
             if timeout is not None:
-                request_kwargs['timeout'] = timeout
+                request_kwargs["timeout"] = timeout
 
             # Send request with context
             response = await client.get(url, **request_kwargs)
+            status_code = response.status_code
             response.raise_for_status()
 
             # Mark success if state capability exists
-            if 'state' in getattr(self, '__capabilities__', set()):
+            if "state" in getattr(self, "__capabilities__", set()):
                 self.mark_tracked()
+                self.set_extra("last_status_code", status_code)
 
             return True
 
         except Exception as e:
+            error_msg = str(e)
+            # Extract status code from HTTP error if available
+            if hasattr(e, "response") and hasattr(e.response, "status_code"):
+                status_code = e.response.status_code
+            
             # Mark failure if state capability exists
-            if 'state' in getattr(self, '__capabilities__', set()):
-                self.mark_failed(str(e))
+            if "state" in getattr(self, "__capabilities__", set()):
+                self.mark_failed(error_msg)
+                if status_code:
+                    self.set_extra("last_status_code", status_code)
             return False
 
     # Inject method
-    if not hasattr(cls, 'send_with'):  # Don't override existing methods
-        setattr(cls, 'send_with', send_with)
+    if not hasattr(cls, "send_with"):  # Don't override existing methods
+        cls.send_with = send_with
 
     # Mark capability
-    _add_capability(cls, 'http_send')
+    _add_capability(cls, "http_send")
 
     return cls
 
-def with_retry_logic(cls: Type[T]) -> Type[T]:
+
+def with_retry_logic(cls: type[T]) -> type[T]:
     """Add retry logic capability to Trackable class.
 
     Enhances send_with with retry functionality.
     """
-    original_send_with = getattr(cls, 'send_with', None)
+    original_send_with = getattr(cls, "send_with", None)
 
-    async def send_with_with_retry(self, client, macros=None, max_retries=3, retry_delay=1.0, **context):
+    async def send_with_with_retry(
+        self, client, macros=None, max_retries=3, retry_delay=1.0, **context
+    ):
         """Send with retry logic and context injection.
 
         Args:
@@ -229,8 +257,8 @@ def with_retry_logic(cls: Type[T]) -> Type[T]:
                                 return False
 
                             # Apply macros if capability exists and macros provided
-                            if macros and 'macros' in getattr(obj, '__capabilities__', set()):
-                                url = obj.apply_macros(macros, ['[{macro}]', '${{{macro}}}'])
+                            if macros and "macros" in getattr(obj, "__capabilities__", set()):
+                                url = obj.apply_macros(macros, ["[{macro}]", "${{{macro}}}"])
                                 if isinstance(url, list):
                                     url = url[0]
 
@@ -238,35 +266,35 @@ def with_retry_logic(cls: Type[T]) -> Type[T]:
                             request_kwargs = {}
 
                             # Extract context parameters
-                            headers = context.get('headers', {})
-                            params = context.get('params', {})
-                            timeout = context.get('timeout')
+                            headers = context.get("headers", {})
+                            params = context.get("params", {})
+                            timeout = context.get("timeout")
 
                             # Add headers if provided
                             if headers:
-                                request_kwargs['headers'] = headers
+                                request_kwargs["headers"] = headers
 
                             # Add query parameters if provided
                             if params:
-                                request_kwargs['params'] = params
+                                request_kwargs["params"] = params
 
                             # Add timeout if provided
                             if timeout is not None:
-                                request_kwargs['timeout'] = timeout
+                                request_kwargs["timeout"] = timeout
 
                             # Send request with context
                             response = await client.get(url, **request_kwargs)
                             response.raise_for_status()
 
                             # Mark success if state capability exists
-                            if 'state' in getattr(obj, '__capabilities__', set()):
+                            if "state" in getattr(obj, "__capabilities__", set()):
                                 obj.mark_tracked()
 
                             return True
 
                         except Exception as e:
                             # Mark failure if state capability exists
-                            if 'state' in getattr(obj, '__capabilities__', set()):
+                            if "state" in getattr(obj, "__capabilities__", set()):
                                 obj.mark_failed(str(e))
                             return False
 
@@ -277,7 +305,7 @@ def with_retry_logic(cls: Type[T]) -> Type[T]:
 
             except Exception as e:
                 # Log retry attempt
-                if 'logging' in getattr(self, '__capabilities__', set()):
+                if "logging" in getattr(self, "__capabilities__", set()):
                     self.log_state(f"Retry attempt {attempt + 1} failed: {e}")
 
             if attempt < max_retries - 1:
@@ -286,34 +314,41 @@ def with_retry_logic(cls: Type[T]) -> Type[T]:
         return False
 
     # Replace or add method
-    setattr(cls, 'send_with', send_with_with_retry)
+    cls.send_with = send_with_with_retry
 
     # Mark capability
-    _add_capability(cls, 'retry')
+    _add_capability(cls, "retry")
 
     return cls
 
+
 # Composite decorators for common combinations
 
-def trackable_basic(cls: Type[T]) -> Type[T]:
+
+def trackable_basic(cls: type[T]) -> type[T]:
     """Apply basic capabilities: macros and state."""
     return with_state(with_macros(cls))
 
-def trackable_standard(cls: Type[T]) -> Type[T]:
+
+def trackable_standard(cls: type[T]) -> type[T]:
     """Apply standard capabilities: macros, state, logging."""
     return with_logging(with_state(with_macros(cls)))
 
-def trackable_full(cls: Type[T]) -> Type[T]:
+
+def trackable_full(cls: type[T]) -> type[T]:
     """Apply all capabilities: macros, state, logging, http_send."""
     return with_http_send(with_logging(with_state(with_macros(cls))))
 
-def trackable_with_retry(cls: Type[T]) -> Type[T]:
+
+def trackable_with_retry(cls: type[T]) -> type[T]:
     """Apply full capabilities with retry logic."""
     return with_retry_logic(with_http_send(with_logging(with_state(with_macros(cls)))))
 
+
 # Context-aware decorators (Dependency Injection)
 
-def with_http_send_contextual(cls: Type[T]) -> Type[T]:
+
+def with_http_send_contextual(cls: type[T]) -> type[T]:
     """Add HTTP send capability with context injection support.
 
     Automatically injects:
@@ -321,6 +356,7 @@ def with_http_send_contextual(cls: Type[T]) -> Type[T]:
     - http_client from context (if not provided)
     - timeout from context (if not provided)
     """
+
     async def send_with(self, client=None, macros=None, **context):
         """Send with full context injection support."""
         # Get global context
@@ -332,9 +368,9 @@ def with_http_send_contextual(cls: Type[T]) -> Type[T]:
             raise ValueError("No HTTP client available (not in params or context)")
 
         # Merge context: global → local
-        timeout = context.get('timeout', ctx.timeout)
-        headers = context.get('headers', {})
-        params = context.get('params', {})
+        timeout = context.get("timeout", ctx.timeout)
+        headers = context.get("headers", {})
+        params = context.get("params", {})
 
         # Get logger from context if available
         logger = ctx.logger
@@ -350,8 +386,8 @@ def with_http_send_contextual(cls: Type[T]) -> Type[T]:
                 return False
 
             # Apply macros
-            if macros and 'macros' in getattr(self, '__capabilities__', set()):
-                url = self.apply_macros(macros, ['[{macro}]', '${{{macro}}}'])
+            if macros and "macros" in getattr(self, "__capabilities__", set()):
+                url = self.apply_macros(macros, ["[{macro}]", "${{{macro}}}"])
                 if isinstance(url, list):
                     url = url[0]
 
@@ -360,18 +396,18 @@ def with_http_send_contextual(cls: Type[T]) -> Type[T]:
                 logger.debug("Sending tracking request", url=url, trackable_key=self.key)
 
             # Prepare request
-            request_kwargs = {'timeout': timeout}
+            request_kwargs = {"timeout": timeout}
             if headers:
-                request_kwargs['headers'] = headers
+                request_kwargs["headers"] = headers
             if params:
-                request_kwargs['params'] = params
+                request_kwargs["params"] = params
 
             # Send request
             response = await active_client.get(url, **request_kwargs)
             response.raise_for_status()
 
             # Mark success
-            if 'state' in getattr(self, '__capabilities__', set()):
+            if "state" in getattr(self, "__capabilities__", set()):
                 self.mark_tracked()
 
             if logger:
@@ -380,7 +416,7 @@ def with_http_send_contextual(cls: Type[T]) -> Type[T]:
             return True
 
         except Exception as e:
-            if 'state' in getattr(self, '__capabilities__', set()):
+            if "state" in getattr(self, "__capabilities__", set()):
                 self.mark_failed(str(e))
 
             if logger:
@@ -388,13 +424,14 @@ def with_http_send_contextual(cls: Type[T]) -> Type[T]:
 
             return False
 
-    setattr(cls, 'send_with', send_with)
+    cls.send_with = send_with
 
-    _add_capability(cls, 'http_send_contextual')
+    _add_capability(cls, "http_send_contextual")
 
     return cls
 
-def with_logging_contextual(cls: Type[T]) -> Type[T]:
+
+def with_logging_contextual(cls: type[T]) -> type[T]:
     """Add logging capability with context-injected logger and event filtering.
 
     Automatically uses logger from TrackingContext.
@@ -410,7 +447,7 @@ def with_logging_contextual(cls: Type[T]) -> Type[T]:
         if logger is None:
             return  # Silent if no logger in context
 
-        log_data = self.to_log_dict() if hasattr(self, 'to_log_dict') else {}
+        log_data = self.to_log_dict() if hasattr(self, "to_log_dict") else {}
 
         if level == "debug":
             logger.debug(message, **log_data)
@@ -421,17 +458,19 @@ def with_logging_contextual(cls: Type[T]) -> Type[T]:
         elif level == "error":
             logger.error(message, **log_data)
 
-    setattr(cls, 'log_state_contextual', log_state)
+    cls.log_state_contextual = log_state
 
-    _add_capability(cls, 'logging_contextual')
+    _add_capability(cls, "logging_contextual")
 
     return cls
 
-def with_metrics_contextual(cls: Type[T]) -> Type[T]:
+
+def with_metrics_contextual(cls: type[T]) -> type[T]:
     """Add metrics capability with context-injected metrics client.
 
     NEW CAPABILITY - track metrics via Prometheus/StatsD.
     """
+
     def record_metric(self, metric_name: str, value: float, tags: dict[str, str] | None = None):
         """Record metric using context metrics client."""
         ctx = get_tracking_context()
@@ -441,31 +480,32 @@ def with_metrics_contextual(cls: Type[T]) -> Type[T]:
             return  # Silent if no metrics client
 
         # Example: StatsD-style API
-        if hasattr(metrics, 'increment'):
+        if hasattr(metrics, "increment"):
             metrics.increment(metric_name, tags=tags or {})
-        elif hasattr(metrics, 'gauge'):
+        elif hasattr(metrics, "gauge"):
             metrics.gauge(metric_name, value, tags=tags or {})
 
-    setattr(cls, 'record_metric', record_metric)
+    cls.record_metric = record_metric
 
-    _add_capability(cls, 'metrics')
+    _add_capability(cls, "metrics")
 
     return cls
 
-def with_retry_logic_contextual(cls: Type[T]) -> Type[T]:
+
+def with_retry_logic_contextual(cls: type[T]) -> type[T]:
     """Add retry logic capability with context injection.
 
     Uses max_retries and retry_delay from TrackingContext.
     """
-    original_send_with = getattr(cls, 'send_with', None)
+    original_send_with = getattr(cls, "send_with", None)
 
     async def send_with_with_retry(self, client=None, macros=None, **context):
         """Send with retry logic using context configuration."""
         ctx = get_tracking_context()
 
         # Use context defaults
-        max_retries = context.get('max_retries', ctx.max_retries)
-        retry_delay = context.get('retry_delay', ctx.retry_delay)
+        max_retries = context.get("max_retries", ctx.max_retries)
+        retry_delay = context.get("retry_delay", ctx.retry_delay)
 
         for attempt in range(max_retries):
             try:
@@ -480,9 +520,9 @@ def with_retry_logic_contextual(cls: Type[T]) -> Type[T]:
                         if active_client is None:
                             raise ValueError("No HTTP client available")
 
-                        timeout = context.get('timeout', ctx.timeout)
-                        headers = context.get('headers', {})
-                        params = context.get('params', {})
+                        timeout = context.get("timeout", ctx.timeout)
+                        headers = context.get("headers", {})
+                        params = context.get("params", {})
                         logger = ctx.logger
 
                         try:
@@ -494,33 +534,39 @@ def with_retry_logic_contextual(cls: Type[T]) -> Type[T]:
                             if not url:
                                 return False
 
-                            if macros and 'macros' in getattr(obj, '__capabilities__', set()):
-                                url = obj.apply_macros(macros, ['[{macro}]', '${{{macro}}}'])
+                            if macros and "macros" in getattr(obj, "__capabilities__", set()):
+                                url = obj.apply_macros(macros, ["[{macro}]", "${{{macro}}}"])
                                 if isinstance(url, list):
                                     url = url[0]
 
                             if logger:
-                                logger.debug("Sending tracking request", url=url, trackable_key=obj.key)
+                                logger.debug(
+                                    "Sending tracking request", url=url, trackable_key=obj.key
+                                )
 
-                            request_kwargs = {'timeout': timeout}
+                            request_kwargs = {"timeout": timeout}
                             if headers:
-                                request_kwargs['headers'] = headers
+                                request_kwargs["headers"] = headers
                             if params:
-                                request_kwargs['params'] = params
+                                request_kwargs["params"] = params
 
                             response = await active_client.get(url, **request_kwargs)
                             response.raise_for_status()
 
-                            if 'state' in getattr(obj, '__capabilities__', set()):
+                            if "state" in getattr(obj, "__capabilities__", set()):
                                 obj.mark_tracked()
 
                             if logger:
-                                logger.debug("Tracking request successful", url=url, status=response.status_code)
+                                logger.debug(
+                                    "Tracking request successful",
+                                    url=url,
+                                    status=response.status_code,
+                                )
 
                             return True
 
                         except Exception as e:
-                            if 'state' in getattr(obj, '__capabilities__', set()):
+                            if "state" in getattr(obj, "__capabilities__", set()):
                                 obj.mark_failed(str(e))
 
                             if logger:
@@ -535,7 +581,7 @@ def with_retry_logic_contextual(cls: Type[T]) -> Type[T]:
 
             except Exception as e:
                 # Log retry attempt
-                if 'logging_contextual' in getattr(self, '__capabilities__', set()):
+                if "logging_contextual" in getattr(self, "__capabilities__", set()):
                     self.log_state_contextual(f"Retry attempt {attempt + 1} failed: {e}")
 
             if attempt < max_retries - 1:
@@ -544,32 +590,43 @@ def with_retry_logic_contextual(cls: Type[T]) -> Type[T]:
         return False
 
     # Replace or add method
-    setattr(cls, 'send_with', send_with_with_retry)
+    cls.send_with = send_with_with_retry
 
     # Mark capability
-    _add_capability(cls, 'retry_contextual')
+    _add_capability(cls, "retry_contextual")
 
     return cls
 
+
 # Composite decorators with context injection
 
-def trackable_contextual_basic(cls: Type[T]) -> Type[T]:
+
+def trackable_contextual_basic(cls: type[T]) -> type[T]:
     """Apply basic contextual capabilities: macros, state, logging_contextual."""
     return with_logging_contextual(with_state(with_macros(cls)))
 
-def trackable_contextual_full(cls: Type[T]) -> Type[T]:
+
+def trackable_contextual_full(cls: type[T]) -> type[T]:
     """Apply full contextual capabilities: macros, state, logging_contextual, http_send_contextual."""
     return with_http_send_contextual(with_logging_contextual(with_state(with_macros(cls))))
 
-def trackable_contextual_with_retry(cls: Type[T]) -> Type[T]:
-    """Apply full contextual capabilities with retry logic."""
-    return with_retry_logic_contextual(with_http_send_contextual(with_logging_contextual(with_state(with_macros(cls)))))
 
-def trackable_contextual_with_metrics(cls: Type[T]) -> Type[T]:
+def trackable_contextual_with_retry(cls: type[T]) -> type[T]:
+    """Apply full contextual capabilities with retry logic."""
+    return with_retry_logic_contextual(
+        with_http_send_contextual(with_logging_contextual(with_state(with_macros(cls))))
+    )
+
+
+def trackable_contextual_with_metrics(cls: type[T]) -> type[T]:
     """Apply full contextual capabilities with metrics."""
-    return with_metrics_contextual(with_http_send_contextual(with_logging_contextual(with_state(with_macros(cls)))))
+    return with_metrics_contextual(
+        with_http_send_contextual(with_logging_contextual(with_state(with_macros(cls))))
+    )
+
 
 # Capability introspection utilities
+
 
 def has_capability(trackable, capability: str) -> bool:
     """Check if Trackable has specific capability.
@@ -581,7 +638,8 @@ def has_capability(trackable, capability: str) -> bool:
     Returns:
         bool: True if capability is present
     """
-    return capability in getattr(trackable, '__capabilities__', set())
+    return capability in getattr(trackable, "__capabilities__", set())
+
 
 def get_capabilities(trackable) -> set[str]:
     """Get all capabilities of Trackable.
@@ -592,7 +650,8 @@ def get_capabilities(trackable) -> set[str]:
     Returns:
         set[str]: Set of capability names
     """
-    return getattr(trackable, '__capabilities__', set())
+    return getattr(trackable, "__capabilities__", set())
+
 
 def has_all_capabilities(trackable, capabilities: list[str]) -> bool:
     """Check if Trackable has all specified capabilities.
@@ -604,8 +663,9 @@ def has_all_capabilities(trackable, capabilities: list[str]) -> bool:
     Returns:
         bool: True if all capabilities are present
     """
-    trackable_caps = getattr(trackable, '__capabilities__', set())
+    trackable_caps = getattr(trackable, "__capabilities__", set())
     return all(cap in trackable_caps for cap in capabilities)
+
 
 def has_any_capability(trackable, capabilities: list[str]) -> bool:
     """Check if Trackable has any of the specified capabilities.
@@ -617,8 +677,9 @@ def has_any_capability(trackable, capabilities: list[str]) -> bool:
     Returns:
         bool: True if any capability is present
     """
-    trackable_caps = getattr(trackable, '__capabilities__', set())
+    trackable_caps = getattr(trackable, "__capabilities__", set())
     return any(cap in trackable_caps for cap in capabilities)
+
 
 __all__ = [
     # Individual decorators
@@ -628,25 +689,21 @@ __all__ = [
     "with_logging",
     "with_http_send",
     "with_retry_logic",
-
     # Context-aware decorators (Dependency Injection)
     "with_http_send_contextual",
     "with_logging_contextual",
     "with_metrics_contextual",
     "with_retry_logic_contextual",
-
     # Composite decorators
     "trackable_basic",
     "trackable_standard",
     "trackable_full",
     "trackable_with_retry",
-
     # Composite decorators with context injection
     "trackable_contextual_basic",
     "trackable_contextual_full",
     "trackable_contextual_with_retry",
     "trackable_contextual_with_metrics",
-
     # Introspection utilities
     "has_capability",
     "get_capabilities",

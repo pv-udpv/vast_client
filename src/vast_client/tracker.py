@@ -2,7 +2,7 @@
 
 import secrets
 import time
-from typing import Any, Union
+from typing import Any
 
 import httpx
 
@@ -16,15 +16,12 @@ from ..log_config.tracing import (
     create_async_span,
     propagate_trace_headers,
     should_propagate_to_service,
-    create_trace_context_snapshot,
-    restore_trace_context_from_snapshot,
 )
+from .capabilities import has_capability, trackable_full
 from .config import VastTrackerConfig
-from .http_client import EmbedHttpClient
-from .trackable import Trackable, TrackableEvent, TrackableCollection
-from .mixins import TrackableEventWithMacros
-from .capabilities import trackable_full, has_capability
 from .context import TrackingContext, set_tracking_context
+from .http_client import EmbedHttpClient
+from .trackable import Trackable, TrackableCollection, TrackableEvent
 
 
 class VastTracker:
@@ -32,7 +29,7 @@ class VastTracker:
 
     def __init__(
         self,
-        tracking_events: Union[dict[str, list[str]], dict[str, list[Trackable]], dict[str, Trackable], TrackableCollection],
+        tracking_events: dict[str, list[str]] | dict[str, list[Trackable]] | dict[str, Trackable] | TrackableCollection,
         client: httpx.AsyncClient | None = None,
         embed_client: "EmbedHttpClient | None" = None,
         creative_id: str | None = None,
@@ -117,7 +114,7 @@ class VastTracker:
                 event_type=event_type,
                 trackables_count=len(trackables),
                 creative_id=creative_id,
-                capabilities=[getattr(t, '__capabilities__', set()) for t in trackables],
+                capabilities=[getattr(t, "__capabilities__", set()) for t in trackables],
             )
 
     def _build_static_macros(self) -> dict[str, str]:
@@ -170,7 +167,7 @@ class VastTracker:
 
     def _normalize_to_registry(
         self,
-        tracking_events: Union[dict[str, list[str]], dict[str, list[Trackable]], dict[str, Trackable], TrackableCollection]
+        tracking_events: dict[str, list[str]] | dict[str, list[Trackable]] | dict[str, Trackable] | TrackableCollection,
     ) -> dict[str, list[Trackable]]:
         """Normalize tracking events to registry format: dict[str, list[Trackable]].
 
@@ -251,8 +248,8 @@ class VastTracker:
         dynamic_macros = self._build_dynamic_macros()
         final_macros = {
             **self.static_macros,  # Static macros (frozen)
-            **dynamic_macros,      # Dynamic macros (fresh)
-            **(macros or {}),      # Additional macros (override)
+            **dynamic_macros,  # Dynamic macros (fresh)
+            **(macros or {}),  # Additional macros (override)
         }
 
         self.logger.info(
@@ -263,22 +260,41 @@ class VastTracker:
             static_macros_count=len(self.static_macros),
             dynamic_macros_count=len(dynamic_macros),
             total_macros_count=len(final_macros),
-            capabilities=[getattr(t, '__capabilities__', set()) for t in trackables],
+            capabilities=[getattr(t, "__capabilities__", set()) for t in trackables],
         )
 
         # Track the event using all registered Trackables
         start_time = time.time()
         results = []
+        processed_events = []  # Collect structured event data for logging
 
         try:
             # Send tracking requests via each Trackable
             for i, trackable in enumerate(trackables):
+                event_info = {
+                    "event_key": trackable.key,
+                    "event_type": event,
+                    "event_url": None,
+                    "status_code": None,
+                    "error": None,
+                    "success": False,
+                }
+                
                 try:
+                    # Extract URL for logging
+                    url = self._get_trackable_url(trackable, final_macros)
+                    event_info["event_url"] = url
+                    
                     # Check if Trackable has http_send capability
-                    if has_capability(trackable, 'http_send'):
+                    if has_capability(trackable, "http_send"):
                         # Use Trackable's send_with method
                         success = await trackable.send_with(self.client, final_macros)
                         results.append(success)
+                        event_info["success"] = success
+                        
+                        # Extract status code if available from trackable state
+                        if has_capability(trackable, "state"):
+                            event_info["status_code"] = trackable.get_extra("last_status_code")
 
                         # Log individual Trackable result
                         if success:
@@ -288,24 +304,32 @@ class VastTracker:
                                 creative_id=self.creative_id,
                                 trackable_index=i,
                                 trackable_key=trackable.key,
-                                **trackable.to_log_dict() if has_capability(trackable, 'logging') else {}
+                                **trackable.to_log_dict()
+                                if has_capability(trackable, "logging")
+                                else {},
                             )
                         else:
+                            error_msg = trackable.get_extra("last_error") if has_capability(trackable, "state") else None
+                            event_info["error"] = error_msg
                             self.logger.debug(
                                 "Trackable send failed",
                                 event_type=event,
                                 creative_id=self.creative_id,
                                 trackable_index=i,
                                 trackable_key=trackable.key,
-                                **trackable.to_log_dict() if has_capability(trackable, 'logging') else {}
+                                **trackable.to_log_dict()
+                                if has_capability(trackable, "logging")
+                                else {},
                             )
                     else:
                         # Fallback: use legacy URL-based sending
                         await self._send_legacy_trackable(trackable, final_macros, event, i)
                         results.append(True)  # Assume success for legacy method
+                        event_info["success"] = True
 
                 except Exception as e:
                     results.append(False)
+                    event_info["error"] = str(e)
                     self.logger.error(
                         "Trackable tracking failed",
                         event_type=event,
@@ -313,8 +337,10 @@ class VastTracker:
                         trackable_index=i,
                         trackable_key=trackable.key,
                         error=str(e),
-                        **trackable.to_log_dict() if has_capability(trackable, 'logging') else {}
+                        **trackable.to_log_dict() if has_capability(trackable, "logging") else {},
                     )
+                finally:
+                    processed_events.append(event_info)
 
             # Check overall success
             successful_count = sum(results)
@@ -328,6 +354,7 @@ class VastTracker:
                     response_time=time.time() - start_time,
                     successful_trackables=successful_count,
                     total_trackables=total_count,
+                    processed_events=processed_events,
                 )
             elif successful_count > 0:
                 self.logger.warning(
@@ -337,6 +364,7 @@ class VastTracker:
                     response_time=time.time() - start_time,
                     successful_trackables=successful_count,
                     total_trackables=total_count,
+                    processed_events=processed_events,
                 )
             else:
                 self.logger.warning(
@@ -346,6 +374,7 @@ class VastTracker:
                     response_time=time.time() - start_time,
                     successful_trackables=successful_count,
                     total_trackables=total_count,
+                    processed_events=processed_events,
                 )
 
         except Exception as e:
@@ -359,7 +388,41 @@ class VastTracker:
             )
             raise
 
-    async def _send_legacy_trackable(self, trackable: Trackable, macros: dict[str, str], event_type: str, trackable_index: int):
+    def _get_trackable_url(self, trackable: Trackable, macros: dict[str, str]) -> str | None:
+        """Extract and process URL from a trackable object.
+        
+        Args:
+            trackable: Trackable object
+            macros: Macros for URL substitution
+            
+        Returns:
+            Processed URL string or None if no URL available
+        """
+        try:
+            # Get the value (URL or list of URLs)
+            value = trackable.value
+            
+            # Apply macros if capability exists
+            if has_capability(trackable, "macros"):
+                processed = trackable.apply_macros(macros, self.config.macro_formats)
+            else:
+                processed = value
+            
+            # Extract first URL if list
+            if isinstance(processed, list):
+                return processed[0] if processed else None
+            
+            return str(processed) if processed else None
+            
+        except Exception:
+            # Fallback to raw value
+            if isinstance(trackable.value, list):
+                return trackable.value[0] if trackable.value else None
+            return str(trackable.value) if trackable.value else None
+
+    async def _send_legacy_trackable(
+        self, trackable: Trackable, macros: dict[str, str], event_type: str, trackable_index: int
+    ):
         """Send tracking request using legacy URL-based method for backward compatibility.
 
         Args:
@@ -369,7 +432,7 @@ class VastTracker:
             trackable_index: Index of trackable in the list
         """
         # Get URLs - use Trackable's apply_macros if available
-        if has_capability(trackable, 'macros'):
+        if has_capability(trackable, "macros"):
             urls = trackable.apply_macros(macros, self.config.macro_formats)
         else:
             urls = trackable.value
@@ -398,9 +461,7 @@ class VastTracker:
             creative_id=self.creative_id,
             urls_count=len(urls),
             macros_count=len(macros),
-            original_urls=[
-                url[:100] + "..." if len(url) > 100 else url for url in urls
-            ],
+            original_urls=[url[:100] + "..." if len(url) > 100 else url for url in urls],
         )
 
         for i, url in enumerate(urls):
@@ -414,9 +475,7 @@ class VastTracker:
                     event_type=event_type,
                     creative_id=self.creative_id,
                     original_url=(
-                        original_url[:100] + "..."
-                        if len(original_url) > 100
-                        else original_url
+                        original_url[:100] + "..." if len(original_url) > 100 else original_url
                     ),
                     processed_url=url[:100] + "..." if len(url) > 100 else url,
                     applied_macros=list(macros.keys()),
@@ -442,7 +501,9 @@ class VastTracker:
 
         return url
 
-    def _create_tracking_context(self, url: str, request_num: int, total_requests: int, event_type: str) -> dict[str, Any]:
+    def _create_tracking_context(
+        self, url: str, request_num: int, total_requests: int, event_type: str
+    ) -> dict[str, Any]:
         """Create shared tracking context for request/response logging.
 
         Args:
@@ -477,7 +538,9 @@ class VastTracker:
         span_name = f"vast.player.tracking.{event_type}"
         async with create_async_span(span_name) as span:
             # Create shared context for this request
-            tracking_context = self._create_tracking_context(url, request_num, total_requests, event_type)
+            tracking_context = self._create_tracking_context(
+                url, request_num, total_requests, event_type
+            )
 
             # Log request phase
             self.logger.debug(
@@ -544,14 +607,18 @@ class VastTracker:
 
                 # Add response-specific fields
                 if success:
-                    tracking_response.update({
-                        "status_code": status_code,
-                        "response_length": response_length,
-                    })
+                    tracking_response.update(
+                        {
+                            "status_code": status_code,
+                            "response_length": response_length,
+                        }
+                    )
                 else:
-                    tracking_response.update({
-                        "error_type": error_type,
-                    })
+                    tracking_response.update(
+                        {
+                            "error_type": error_type,
+                        }
+                    )
                     if status_code:
                         tracking_response["status_code"] = status_code
 
