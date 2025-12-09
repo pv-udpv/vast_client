@@ -13,6 +13,7 @@ Features:
 
 from typing import Any
 from lxml import etree
+import json
 from dataclasses import dataclass
 from enum import Enum
 
@@ -297,5 +298,4 @@ class EnhancedVASTParser(VASTParser):
     
     def to_json(self, result: dict, indent: int = 2) -> str:
         """Convert result to JSON"""
-        import json
         return json.dumps(result, indent=indent, ensure_ascii=False)
