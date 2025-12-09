@@ -10,6 +10,7 @@ import httpx
 
 from ..log_config import get_context_logger
 from ..tracker import VastTracker
+from ..vast_helpers import prepare_tracking_events
 
 
 class MultiSourceTracker:
@@ -56,10 +57,8 @@ class MultiSourceTracker:
         self.creative_id = creative_id
         self.embed_client = embed_client
 
-        # Extract tracking events from VAST data
-        tracking_events = vast_data.get("tracking_events", {})
-        tracking_events.update({"impression": vast_data.get("impression", [])})
-        tracking_events.update({"error": vast_data.get("error", [])})
+        # Extract tracking events from VAST data using helper
+        tracking_events = prepare_tracking_events(vast_data)
 
         # Create underlying VastTracker
         self.tracker = VastTracker(

@@ -128,6 +128,215 @@ await tracker.track_event("start")
 await tracker.track_event("midpoint", macros={"duration": "30"})
 ```
 
+## Multi-Source Architecture
+
+The VAST client now implements a **multi-source first architecture** where single-source requests are handled as a special case of multi-source operations. This provides powerful capabilities for production environments requiring high availability and fallback support.
+
+### Key Features
+
+🚀 **Multi-Source Fetching**
+- Fetch from multiple VAST sources in parallel or sequentially
+- Built-in fallback support with automatic retry
+- Race mode for fastest response
+
+🎯 **Smart Filtering**
+- Filter ads by media type (video/audio)
+- Duration constraints (min/max)
+- Bitrate and dimension requirements
+
+🔄 **Unified Pipeline**
+- FETCH → PARSE → SELECT → TRACK
+- Single code path for all requests
+- Consistent error handling and metrics
+
+### Basic Multi-Source Usage
+
+#### 1. Single-Source (Backward Compatible)
+
+The traditional single-source request continues to work unchanged:
+
+```python
+from vast_client import VastClient
+
+# Simple single-source request (unchanged)
+client = VastClient("https://ads.example.com/vast")
+ad_data = await client.request_ad()
+```
+
+#### 2. Request with Fallback
+
+Automatically fallback to alternative sources if the primary fails:
+
+```python
+from vast_client import VastClient
+
+client = VastClient("https://ads.example.com/vast")
+
+# Request with fallback sources
+ad_data = await client.request_ad_with_fallback(
+    primary="https://ads1.example.com/vast",
+    fallbacks=[
+        "https://ads2.example.com/vast",
+        "https://ads3.example.com/vast"
+    ],
+    auto_track=True
+)
+```
+
+#### 3. Multi-Source with Parallel Fetching
+
+Fetch from multiple sources simultaneously and use the first successful response:
+
+```python
+from vast_client import VastClient
+from vast_client.multi_source import VastFetchConfig, FetchStrategy, FetchMode
+
+client = VastClient("https://ads.example.com/vast")
+
+# Configure multi-source fetch
+config = VastFetchConfig(
+    sources=[
+        "https://ads1.example.com/vast",
+        "https://ads2.example.com/vast",
+        "https://ads3.example.com/vast"
+    ],
+    strategy=FetchStrategy(
+        mode=FetchMode.PARALLEL,  # Fetch all in parallel
+        timeout=10.0,              # Overall timeout
+        per_source_timeout=5.0,    # Per-source timeout
+    ),
+    auto_track=True
+)
+
+# Execute pipeline
+result = await client.multi_source.execute_pipeline(config)
+
+if result.success:
+    ad_data = result.parsed_data
+    print(f"Ad from: {result.source_url}")
+```
+
+#### 4. Multi-Source with Filtering
+
+Filter ads based on media type, duration, or other criteria:
+
+```python
+from vast_client import VastClient
+from vast_client.multi_source import (
+    VastFetchConfig,
+    VastParseFilter,
+    MediaType,
+    FetchMode,
+)
+
+client = VastClient("https://ads.example.com/vast")
+
+# Create filter for video ads between 15-30 seconds
+parse_filter = VastParseFilter(
+    media_types=[MediaType.VIDEO],
+    min_duration=15,
+    max_duration=30,
+    min_bitrate=1000,  # kbps
+)
+
+# Configure fetch with filter
+config = VastFetchConfig(
+    sources=[
+        "https://ads1.example.com/vast",
+        "https://ads2.example.com/vast",
+    ],
+    fallbacks=["https://fallback.example.com/vast"],
+    parse_filter=parse_filter,
+)
+
+result = await client.multi_source.execute_pipeline(config)
+```
+
+#### 5. Sequential Mode with Race
+
+Fetch sources one by one or race for the fastest:
+
+```python
+from vast_client.multi_source import VastFetchConfig, FetchStrategy, FetchMode
+
+# Sequential mode - try sources one by one
+sequential_config = VastFetchConfig(
+    sources=["https://ads1.com/vast", "https://ads2.com/vast"],
+    strategy=FetchStrategy(mode=FetchMode.SEQUENTIAL),
+)
+
+# Race mode - return first successful response
+race_config = VastFetchConfig(
+    sources=["https://ads1.com/vast", "https://ads2.com/vast"],
+    strategy=FetchStrategy(mode=FetchMode.RACE),
+)
+
+result = await client.multi_source.execute_pipeline(race_config)
+```
+
+### Advanced Multi-Source Features
+
+#### Custom Retry Logic
+
+```python
+from vast_client.multi_source import FetchStrategy
+
+strategy = FetchStrategy(
+    mode=FetchMode.PARALLEL,
+    timeout=30.0,
+    per_source_timeout=10.0,
+    max_retries=3,           # Retry each source up to 3 times
+    retry_delay=1.0,         # Wait 1 second between retries
+    stop_on_first_success=True  # Stop on first success
+)
+```
+
+#### Complex Filtering
+
+```python
+from vast_client.multi_source import VastParseFilter, MediaType
+
+# High-quality video filter
+filter = VastParseFilter(
+    media_types=[MediaType.VIDEO],
+    min_duration=15,
+    max_duration=60,
+    min_bitrate=2000,                    # Minimum 2 Mbps
+    required_dimensions=(1920, 1080),    # Full HD
+    accept_wrappers=True,
+    max_wrapper_depth=5
+)
+```
+
+#### Error Handling
+
+```python
+config = VastFetchConfig(
+    sources=["https://ads1.com/vast", "https://ads2.com/vast"],
+    fallbacks=["https://fallback.com/vast"],
+)
+
+result = await client.multi_source.execute_pipeline(config)
+
+if result.success:
+    print(f"✓ Success: {result.source_url}")
+    print(f"Ad System: {result.parsed_data['ad_system']}")
+else:
+    print("✗ All sources failed")
+    for error in result.errors:
+        print(f"  - {error['source']}: {error['error']}")
+```
+
+### Multi-Source Architecture Benefits
+
+✅ **High Availability** - Automatic fallback ensures ad delivery  
+✅ **Performance** - Parallel fetching reduces latency  
+✅ **Flexibility** - Sequential, parallel, or race modes  
+✅ **Quality Control** - Filter ads by media type, duration, bitrate  
+✅ **Backward Compatible** - Existing code works unchanged  
+✅ **Unified Metrics** - All requests tracked consistently  
+✅ **Production Ready** - Built-in retry, timeout, error handling  
+
 ## Core Components
 
 ### VastClient

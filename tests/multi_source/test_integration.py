@@ -133,9 +133,7 @@ class TestBackwardCompatibility:
 
     @pytest.mark.asyncio
     @patch("vast_client.client.get_main_http_client")
-    async def test_simple_url_initialization(
-        self, mock_get_client, mock_vast_response
-    ):
+    async def test_simple_url_initialization(self, mock_get_client, mock_vast_response):
         """Test simple URL initialization still works."""
         mock_response = MagicMock()
         mock_response.status_code = 200

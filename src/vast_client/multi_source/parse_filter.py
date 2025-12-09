@@ -99,10 +99,15 @@ class VastParseFilter:
                 # Check first media file's bitrate
                 bitrate = media_files[0].get("bitrate")
                 if bitrate is not None:
-                    if self.min_bitrate is not None and int(bitrate) < self.min_bitrate:
-                        return False
-                    if self.max_bitrate is not None and int(bitrate) > self.max_bitrate:
-                        return False
+                    try:
+                        bitrate_int = int(bitrate)
+                        if self.min_bitrate is not None and bitrate_int < self.min_bitrate:
+                            return False
+                        if self.max_bitrate is not None and bitrate_int > self.max_bitrate:
+                            return False
+                    except (ValueError, TypeError):
+                        # Skip validation if bitrate is not a valid integer
+                        pass
 
         # Check dimensions (if specified and available)
         if self.required_dimensions is not None:
@@ -111,9 +116,15 @@ class VastParseFilter:
                 width = media_files[0].get("width")
                 height = media_files[0].get("height")
                 if width is not None and height is not None:
-                    required_width, required_height = self.required_dimensions
-                    if int(width) != required_width or int(height) != required_height:
-                        return False
+                    try:
+                        width_int = int(width)
+                        height_int = int(height)
+                        required_width, required_height = self.required_dimensions
+                        if width_int != required_width or height_int != required_height:
+                            return False
+                    except (ValueError, TypeError):
+                        # Skip validation if dimensions are not valid integers
+                        pass
 
         return True
 

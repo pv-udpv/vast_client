@@ -9,6 +9,7 @@ from ..events import VastEvents
 from ..http_client_manager import get_main_http_client, get_tracking_http_client
 from ..log_config import get_context_logger
 from ..parser import VastParser
+from ..vast_helpers import extract_creative_id
 from .fetch_config import FetchResult, VastFetchConfig
 from .fetcher import VastMultiSourceFetcher
 from .parse_filter import VastParseFilter
@@ -183,8 +184,7 @@ class VastMultiSourceOrchestrator:
         if auto_track:
             try:
                 tracking_client = get_tracking_http_client()
-                creative_data = vast_data.get("creative", {})
-                creative_id = creative_data.get("id") or creative_data.get("ad_id")
+                creative_id = extract_creative_id(vast_data)
 
                 tracker = MultiSourceTracker(
                     vast_data=vast_data,

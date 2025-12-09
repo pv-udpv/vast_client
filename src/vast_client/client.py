@@ -7,7 +7,6 @@ import httpx
 
 from .events import VastEvents
 from .http_client_manager import (
-    get_http_client_manager,
     get_main_http_client,
     get_tracking_http_client,
     record_main_client_request,
@@ -18,7 +17,8 @@ from .config import VastClientConfig, VastTrackerConfig
 from .parser import VastParser
 from .player import VastPlayer
 from .tracker import VastTracker
-from .multi_source import VastMultiSourceOrchestrator, VastFetchConfig, FetchStrategy
+from .multi_source import VastMultiSourceOrchestrator, VastFetchConfig
+from .vast_helpers import extract_creative_id, prepare_tracking_events
 
 
 if TYPE_CHECKING:
@@ -354,15 +354,12 @@ class VastClient:
         if result.parsed_data is None:
             raise Exception("Failed to parse VAST response")
 
-        # Update internal tracker with tracking events
+        # Update internal tracker with tracking events using helpers
         if result.parsed_data:
-            tracking_events = result.parsed_data.get("tracking_events", {})
-            tracking_events.update({"impression": result.parsed_data.get("impression", [])})
-            tracking_events.update({"error": result.parsed_data.get("error", [])})
+            tracking_events = prepare_tracking_events(result.parsed_data)
 
             if tracking_events:
-                creative_data = result.parsed_data.get("creative", {})
-                creative_id = creative_data.get("id") or creative_data.get("ad_id")
+                creative_id = extract_creative_id(result.parsed_data)
 
                 tracking_client = get_tracking_http_client()
                 self.tracker = VastTracker(
