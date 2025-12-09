@@ -29,7 +29,10 @@ class VastTracker:
 
     def __init__(
         self,
-        tracking_events: dict[str, list[str]] | dict[str, list[Trackable]] | dict[str, Trackable] | TrackableCollection,
+        tracking_events: dict[str, list[str]]
+        | dict[str, list[Trackable]]
+        | dict[str, Trackable]
+        | TrackableCollection,
         client: httpx.AsyncClient | None = None,
         embed_client: "EmbedHttpClient | None" = None,
         creative_id: str | None = None,
@@ -57,6 +60,9 @@ class VastTracker:
         self.config = config or VastTrackerConfig()
         self.tracked_events = set()
 
+        # Use contextual logger that automatically picks up context variables
+        self.logger = get_context_logger("vast_tracker")
+
         # Backward compatibility: extract embed_client from ad_request if needed
         if self.embed_client is None and ad_request is not None:
             # TODO: Remove this backward compatibility in future version
@@ -64,9 +70,6 @@ class VastTracker:
                 "Using deprecated ad_request parameter, use embed_client instead",
                 creative_id=creative_id,
             )
-
-        # Use contextual logger that automatically picks up context variables
-        self.logger = get_context_logger("vast_tracker")
 
         # Initialize tracking context for dependency injection
         if context is None:
@@ -167,7 +170,10 @@ class VastTracker:
 
     def _normalize_to_registry(
         self,
-        tracking_events: dict[str, list[str]] | dict[str, list[Trackable]] | dict[str, Trackable] | TrackableCollection,
+        tracking_events: dict[str, list[str]]
+        | dict[str, list[Trackable]]
+        | dict[str, Trackable]
+        | TrackableCollection,
     ) -> dict[str, list[Trackable]]:
         """Normalize tracking events to registry format: dict[str, list[Trackable]].
 
@@ -233,8 +239,16 @@ class VastTracker:
             event: Event name to track
             macros: Additional macros for URL substitution
         """
+        # Ensure HTTP client is available for trackable sends
+        if self.client is None:
+            self.client = get_tracking_http_client()
+            self.context.http_client = self.client
+
         # Get the list of trackable objects for this event
         trackables = self.events.get(event, [])
+        self.logger.debug(
+            "Preparing to track event", event_type=event, creative_id=self.creative_id
+        )
         if not trackables:
             self.logger.warning(
                 "Event not found in tracking events",
@@ -252,7 +266,7 @@ class VastTracker:
             **(macros or {}),  # Additional macros (override)
         }
 
-        self.logger.info(
+        self.logger.debug(
             "Tracking event started",
             event_type=event,
             creative_id=self.creative_id,
@@ -279,19 +293,19 @@ class VastTracker:
                     "error": None,
                     "success": False,
                 }
-                
+
                 try:
                     # Extract URL for logging
                     url = self._get_trackable_url(trackable, final_macros)
                     event_info["event_url"] = url
-                    
+
                     # Check if Trackable has http_send capability
                     if has_capability(trackable, "http_send"):
                         # Use Trackable's send_with method
                         success = await trackable.send_with(self.client, final_macros)
                         results.append(success)
                         event_info["success"] = success
-                        
+
                         # Extract status code if available from trackable state
                         if has_capability(trackable, "state"):
                             event_info["status_code"] = trackable.get_extra("last_status_code")
@@ -309,8 +323,25 @@ class VastTracker:
                                 else {},
                             )
                         else:
-                            error_msg = trackable.get_extra("last_error") if has_capability(trackable, "state") else None
+                            has_state = has_capability(trackable, "state")
+                            error_msg = trackable.get_extra("last_error") if has_state else None
+
+                            if not error_msg:
+                                # Ensure a reason is recorded even if the trackable didn't set one
+                                error_msg = "unknown_failure"
+                                if has_state:
+                                    trackable.set_extra("last_error", error_msg)
+
                             event_info["error"] = error_msg
+                            event_info["capabilities"] = list(
+                                getattr(trackable, "__capabilities__", set())
+                            )
+                            # Capture status and attempts when available to debug "failed completely" cases
+                            event_info["status_code"] = trackable.get_extra("last_status_code")
+                            event_info["attempt_count"] = (
+                                trackable.get_extra("attempt_count") or 0 if has_state else 0
+                            )
+
                             self.logger.debug(
                                 "Trackable send failed",
                                 event_type=event,
@@ -390,30 +421,30 @@ class VastTracker:
 
     def _get_trackable_url(self, trackable: Trackable, macros: dict[str, str]) -> str | None:
         """Extract and process URL from a trackable object.
-        
+
         Args:
             trackable: Trackable object
             macros: Macros for URL substitution
-            
+
         Returns:
             Processed URL string or None if no URL available
         """
         try:
             # Get the value (URL or list of URLs)
             value = trackable.value
-            
+
             # Apply macros if capability exists
             if has_capability(trackable, "macros"):
                 processed = trackable.apply_macros(macros, self.config.macro_formats)
             else:
                 processed = value
-            
+
             # Extract first URL if list
             if isinstance(processed, list):
                 return processed[0] if processed else None
-            
+
             return str(processed) if processed else None
-            
+
         except Exception:
             # Fallback to raw value
             if isinstance(trackable.value, list):
@@ -558,7 +589,7 @@ class VastTracker:
             try:
                 # Get global HTTP client for tracking if not set
                 if self.client is None:
-                    self.client = await get_tracking_http_client()
+                    self.client = get_tracking_http_client()
 
                 # Selective propagation: only propagate to trusted tracking services
                 headers = {}
@@ -639,7 +670,12 @@ class VastTracker:
                     )
 
                 # Record request metric
-                record_tracking_client_request(success, response_time, error_type, None)
+                record_tracking_client_request(
+                    url=url,
+                    status_code=status_code,
+                    duration=response_time,
+                    error=error_type,
+                )
 
     @classmethod
     def from_config(

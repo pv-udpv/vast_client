@@ -145,7 +145,7 @@ def with_http_send(cls: type[T]) -> type[T]:
         """
         status_code = None
         error_msg = None
-        
+
         try:
             # Get URL from value
             if isinstance(self.value, list):
@@ -202,7 +202,7 @@ def with_http_send(cls: type[T]) -> type[T]:
             # Extract status code from HTTP error if available
             if hasattr(e, "response") and hasattr(e.response, "status_code"):
                 status_code = e.response.status_code
-            
+
             # Mark failure if state capability exists
             if "state" in getattr(self, "__capabilities__", set()):
                 self.mark_failed(error_msg)
@@ -210,9 +210,10 @@ def with_http_send(cls: type[T]) -> type[T]:
                     self.set_extra("last_status_code", status_code)
             return False
 
-    # Inject method
-    if not hasattr(cls, "send_with"):  # Don't override existing methods
-        cls.send_with = send_with
+    # Inject method (override placeholder implementations too)
+    # Always install the capability version so TrackableEvent's stub send_with
+    # does not short-circuit without setting state/last_error.
+    cls.send_with = send_with
 
     # Mark capability
     _add_capability(cls, "http_send")
@@ -547,7 +548,10 @@ def with_retry_logic_contextual(cls: type[T]) -> type[T]:
                                 if "state" in getattr(obj, "__capabilities__", set()):
                                     obj.mark_failed(error_msg)
                                 if logger:
-                                    logger.warning("Tracking request skipped - empty URL", trackable_key=obj.key)
+                                    logger.warning(
+                                        "Tracking request skipped - empty URL",
+                                        trackable_key=obj.key,
+                                    )
                                 return False
 
                             if macros and "macros" in getattr(obj, "__capabilities__", set()):
