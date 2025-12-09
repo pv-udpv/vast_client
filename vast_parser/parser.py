@@ -215,7 +215,7 @@ class EnhancedVASTParser(VASTParser):
                 val = elem.get(part[1:]) or "?"
                 values.append(val)
             else:
-                values.append(part.strip("'\"")
+                values.append(part.strip("'\""))
         
         return "".join(values)
     
