@@ -1,6 +1,6 @@
 """Unit tests for VAST client."""
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -74,14 +74,13 @@ class TestVastClientRequestAd:
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(return_value=mock_response)
 
-        client = VastClient("https://ads.example.com/vast")
-        client.client = mock_client
+        with patch('vast_client.client.get_main_http_client', return_value=mock_client):
+            client = VastClient("https://ads.example.com/vast")
+            vast_data = await client.request_ad()
 
-        vast_data = await client.request_ad()
-
-        assert isinstance(vast_data, dict)
-        assert vast_data["ad_system"] == "Test Ad System"
-        assert vast_data["ad_title"] == "Test Ad Title"
+            assert isinstance(vast_data, dict)
+            assert vast_data["ad_system"] == "Test Ad System"
+            assert vast_data["ad_title"] == "Test Ad Title"
 
     @pytest.mark.asyncio
     async def test_request_ad_no_content(self):
@@ -92,12 +91,11 @@ class TestVastClientRequestAd:
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(return_value=mock_response)
 
-        client = VastClient("https://ads.example.com/vast")
-        client.client = mock_client
+        with patch('vast_client.client.get_main_http_client', return_value=mock_client):
+            client = VastClient("https://ads.example.com/vast")
+            result = await client.request_ad()
 
-        result = await client.request_ad()
-
-        assert result == ""
+            assert result == ""
 
     @pytest.mark.asyncio
     async def test_request_ad_with_params(self, minimal_vast_xml):
@@ -111,13 +109,12 @@ class TestVastClientRequestAd:
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(return_value=mock_response)
 
-        client = VastClient("https://ads.example.com/vast")
-        client.client = mock_client
+        with patch('vast_client.client.get_main_http_client', return_value=mock_client):
+            client = VastClient("https://ads.example.com/vast")
+            await client.request_ad(params={"user_id": "user-123"})
 
-        await client.request_ad(params={"user_id": "user-123"})
-
-        # Verify request was made
-        mock_client.get.assert_called_once()
+            # Verify request was made
+            mock_client.get.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_request_ad_with_headers(self, minimal_vast_xml):
@@ -131,12 +128,11 @@ class TestVastClientRequestAd:
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(return_value=mock_response)
 
-        client = VastClient("https://ads.example.com/vast")
-        client.client = mock_client
+        with patch('vast_client.client.get_main_http_client', return_value=mock_client):
+            client = VastClient("https://ads.example.com/vast")
+            await client.request_ad(headers={"X-Custom-Header": "value"})
 
-        await client.request_ad(headers={"X-Custom-Header": "value"})
-
-        mock_client.get.assert_called_once()
+            mock_client.get.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_request_ad_non_xml_response(self):
@@ -150,13 +146,12 @@ class TestVastClientRequestAd:
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(return_value=mock_response)
 
-        client = VastClient("https://ads.example.com/vast")
-        client.client = mock_client
+        with patch('vast_client.client.get_main_http_client', return_value=mock_client):
+            client = VastClient("https://ads.example.com/vast")
+            result = await client.request_ad()
 
-        result = await client.request_ad()
-
-        # Should return raw text
-        assert result == "Plain text response"
+            # Should return raw text
+            assert result == "Plain text response"
 
     @pytest.mark.asyncio
     async def test_request_ad_creates_tracker(self, minimal_vast_xml):
