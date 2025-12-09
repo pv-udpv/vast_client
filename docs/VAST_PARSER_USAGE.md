@@ -19,11 +19,34 @@ for impression in result['impressions']:
 
 ```python
 from vast_parser import EnhancedVASTParser
-import yaml
 
-# Load configuration
-with open('configs/vast_config_adaptive_streaming.yaml') as f:
-    config = yaml.safe_load(f)
+# Example configuration (as Python dict)
+config = {
+    "adaptive": {
+        "hd": {
+            "xpath": "//vast:MediaFile[@width >= '1280']",
+            "merge": "append",
+            "target": "adaptive.hd",
+            "extract_node": True,
+            "fields": {
+                "id": "@id",
+                "bitrate": "@bitrate",
+                "url": "text()"
+            },
+            "sort_by": "bitrate",
+            "sort_order": "desc",
+            "limit": 1
+        },
+        "mobile": {
+            "xpath": "//vast:MediaFile[@width <= '640']",
+            "merge": "append",
+            "target": "adaptive.mobile",
+            "extract_node": True,
+            "fields": {"id": "@id", "url": "text()"},
+            "limit": 1
+        }
+    }
+}
 
 # Parse with filtering and sorting
 parser = EnhancedVASTParser(config)
@@ -41,26 +64,34 @@ player.add_variant(hd_video['url'], hd_video['bitrate'])
 
 ### Device Targeting
 
-```yaml
-media_files:
-  desktop:
-    xpath: "//vast:MediaFile[@width >= '1280']"
-    limit: 1
-  
-  mobile:
-    xpath: "//vast:MediaFile[@width <= '640']"
-    limit: 1
+```python
+config = {
+    "media_files": {
+        "desktop": {
+            "xpath": "//vast:MediaFile[@width >= '1280']",
+            "limit": 1
+        },
+        "mobile": {
+            "xpath": "//vast:MediaFile[@width <= '640']",
+            "limit": 1
+        }
+    }
+}
 ```
 
 ### Codec Selection
 
-```yaml
-media_files:
-  h264:
-    xpath: "//vast:MediaFile[@codec='H.264']"
-  
-  hevc:
-    xpath: "//vast:MediaFile[@codec='HEVC']"
+```python
+config = {
+    "media_files": {
+        "h264": {
+            "xpath": "//vast:MediaFile[@codec='H.264']"
+        },
+        "hevc": {
+            "xpath": "//vast:MediaFile[@codec='HEVC']"
+        }
+    }
+}
 ```
 
 ## XPath Filtering
@@ -101,42 +132,58 @@ media_files:
 ### append
 Add multiple values to a list:
 
-```yaml
-tracking:
-  impressions:
-    xpath: "//vast:Impression/text()"
-    merge: append  # Collects all impressions
+```python
+config = {
+    "tracking": {
+        "impressions": {
+            "xpath": "//vast:Impression/text()",
+            "merge": "append"  # Collects all impressions
+        }
+    }
+}
 ```
 
 ### replace
 Keep only the last value:
 
-```yaml
-tracking:
-  error:
-    xpath: "//vast:Error/text()"
-    merge: replace  # Only last error
+```python
+config = {
+    "tracking": {
+        "error": {
+            "xpath": "//vast:Error/text()",
+            "merge": "replace"  # Only last error
+        }
+    }
+}
 ```
 
 ### update
 Merge dictionary values:
 
-```yaml
-metadata:
-  ad_system:
-    xpath: "//vast:AdSystem"
-    merge: update  # Merges with existing
+```python
+config = {
+    "metadata": {
+        "ad_system": {
+            "xpath": "//vast:AdSystem",
+            "merge": "update"  # Merges with existing
+        }
+    }
+}
 ```
 
 ## Sorting and Limiting
 
-```yaml
-media_files:
-  best_quality:
-    xpath: "//vast:MediaFile"
-    sort_by: "bitrate"        # Sort by this field
-    sort_order: "desc"         # Descending order
-    limit: 1                   # Keep only first
+```python
+config = {
+    "media_files": {
+        "best_quality": {
+            "xpath": "//vast:MediaFile",
+            "sort_by": "bitrate",      # Sort by this field
+            "sort_order": "desc",      # Descending order
+            "limit": 1                 # Keep only first
+        }
+    }
+}
 ```
 
 ## Testing
