@@ -92,7 +92,7 @@ class VASTParser:
             
         Raises:
             FileNotFoundError: If file doesn't exist
-            PermissionError: If file cannot be accessed
+            PermissionError: If file cannot be accessed due to permissions
             UnicodeDecodeError: If file encoding is invalid
             OSError: For other I/O errors
         """
@@ -100,10 +100,16 @@ class VASTParser:
             with open(filepath, 'r', encoding='utf-8') as f:
                 return self.parse(f.read())
         except FileNotFoundError:
-            # Re-raise to let caller handle missing file
+            # Let caller handle missing file
             raise
-        except (UnicodeDecodeError, OSError):
-            # Re-raise encoding or I/O errors
+        except PermissionError:
+            # Let caller handle permission issues
+            raise
+        except UnicodeDecodeError:
+            # Let caller handle encoding errors
+            raise
+        except OSError:
+            # Let caller handle other I/O errors
             raise
 
 
