@@ -256,12 +256,13 @@ class EnhancedVASTParser(VASTParser):
             obj[last_key] = values[-1] if values else None
         
         elif strategy == "update":
-            if isinstance(values[0], dict):
-                if last_key not in obj:
-                    obj[last_key] = {}
-                obj[last_key].update(values[0])
-            else:
-                obj[last_key] = values[0]
+            if values:
+                if isinstance(values[0], dict):
+                    if last_key not in obj:
+                        obj[last_key] = {}
+                    obj[last_key].update(values[0])
+                else:
+                    obj[last_key] = values[0]
     
     def to_json(self, result: Dict, indent: int = 2) -> str:
         """Convert result to JSON"""
