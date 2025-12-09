@@ -137,6 +137,8 @@ class TestEnhancedParserErrorHandling:
     
     def test_malformed_xml_parsing(self):
         """Test parsing with malformed XML raises appropriate error"""
+        from lxml import etree
+        
         parser = VASTParser()
         malformed_xml = """<?xml version="1.0"?>
         <VAST version="4.0">
@@ -148,13 +150,11 @@ class TestEnhancedParserErrorHandling:
         </VAST>"""
         
         # Should raise XMLSyntaxError from lxml
-        with pytest.raises(Exception):  # lxml.etree.XMLSyntaxError
+        with pytest.raises(etree.XMLSyntaxError):
             parser.parse(malformed_xml)
     
     def test_invalid_xpath_expression(self):
         """Test handling of invalid XPath expressions"""
-        from lxml import etree
-        
         config = {
             "test": {
                 "invalid": {
@@ -225,8 +225,6 @@ class TestEnhancedParserErrorHandling:
     
     def test_process_concat_basic(self):
         """Test _process_concat() method with basic concatenation"""
-        from lxml import etree
-        
         config = {
             "creatives": {
                 "media": {
@@ -267,8 +265,6 @@ class TestEnhancedParserErrorHandling:
     
     def test_process_concat_with_strings(self):
         """Test _process_concat() with string literals"""
-        from lxml import etree
-        
         config = {
             "test": {
                 "concat_test": {
