@@ -1,90 +1,20 @@
 """
 Multi-Source VAST Fetcher
 
-Handles fetching VAST XML from one or more sources with support for
+Handles fetching VAST XML from one or more upstreams with support for
 parallel, sequential, and race modes.
 """
 
 import asyncio
 import time
-from typing import Any
+from typing import Any, Union
 
 import httpx
 
 from ..events import VastEvents
 from ..log_config import get_context_logger
-from ..routes.helpers import build_url_preserving_unicode
 from .fetch_config import FetchMode, FetchResult, FetchStrategy
-
-
-def _normalize_source(
-    source: str | dict[str, Any],
-    global_params: dict[str, Any] | None = None,
-    global_headers: dict[str, str] | None = None,
-) -> tuple[str, dict[str, Any], dict[str, str]]:
-    """
-    Normalize a source configuration to URL, params, and headers.
-
-    Args:
-        source: Source URL string or dict configuration
-        global_params: Global parameters to merge
-        global_headers: Global headers to merge
-
-    Returns:
-        Tuple of (url, params, headers)
-
-    Examples:
-        >>> url, params, headers = _normalize_source("https://ads.example.com/vast")
-        >>> url
-        'https://ads.example.com/vast'
-
-        >>> url, params, headers = _normalize_source({
-        ...     "base_url": "https://ads.example.com/vast",
-        ...     "params": {"slot": "pre-roll"}
-        ... })
-        >>> url
-        'https://ads.example.com/vast'
-        >>> params
-        {'slot': 'pre-roll'}
-    """
-    global_params = global_params or {}
-    global_headers = global_headers or {}
-
-    if isinstance(source, str):
-        # Simple URL string
-        return source, global_params.copy(), global_headers.copy()
-
-    elif isinstance(source, dict):
-        # Dict configuration (EmbedHttpClient-style)
-        base_url = source.get("base_url") or source.get("url")
-        if not base_url:
-            raise ValueError(
-                f"Dict source must have 'base_url' or 'url' key: {source}"
-            )
-
-        # Merge params: source params override global params
-        merged_params = {**global_params}
-        if "params" in source:
-            merged_params.update(source["params"])
-
-        # Merge headers: source headers override global headers
-        merged_headers = {**global_headers}
-        if "headers" in source:
-            merged_headers.update(source["headers"])
-
-        # Handle encoding_config if present
-        encoding_config = source.get("encoding_config", {})
-        if encoding_config:
-            # Store encoding config in metadata for later use
-            # For now, we'll build the URL with params and let the caller handle encoding
-            pass
-
-        return base_url, merged_params, merged_headers
-
-    else:
-        raise TypeError(
-            f"Source must be str or dict, got {type(source).__name__}: {source}"
-        )
+from .upstream import VastUpstream, create_upstream
 
 
 class VastMultiSourceFetcher:
@@ -119,21 +49,21 @@ class VastMultiSourceFetcher:
 
     async def fetch_all(
         self,
-        sources: list[str | dict[str, Any]],
+        sources: list[Union[str, dict[str, Any], VastUpstream]],
         strategy: FetchStrategy,
         http_client: httpx.AsyncClient,
         params: dict[str, Any] | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Union[dict[str, str], None] = None,
     ) -> FetchResult:
         """
-        Fetch from all sources according to the strategy.
+        Fetch from all upstreams according to the strategy.
 
         Args:
-            sources: List of VAST sources (URLs or dict configs)
+            sources: List of VAST sources (URLs, dict configs, or VastUpstream objects)
             strategy: Fetch strategy configuration
-            http_client: HTTP client for requests
-            params: Additional query parameters (global)
-            headers: Additional headers (global)
+            http_client: HTTP client for HTTP upstreams (optional)
+            params: Additional query parameters (global, for URL/dict sources)
+            headers: Additional headers (global, for URL/dict sources)
 
         Returns:
             FetchResult: Result containing successful response or errors
@@ -193,23 +123,23 @@ class VastMultiSourceFetcher:
 
     async def fetch_with_fallbacks(
         self,
-        sources: list[str | dict[str, Any]],
-        fallbacks: list[str | dict[str, Any]],
+        sources: list[Union[str, dict[str, Any], VastUpstream]],
+        fallbacks: list[Union[str, dict[str, Any], VastUpstream]],
         strategy: FetchStrategy,
         http_client: httpx.AsyncClient,
         params: dict[str, Any] | None = None,
-        headers: dict[str, str] | None = None,
+        headers: Union[dict[str, str], None] = None,
     ) -> FetchResult:
         """
-        Fetch from sources, falling back to fallback list on failure.
+        Fetch from upstreams, falling back to fallback list on failure.
 
         Args:
-            sources: Primary source URLs
-            fallbacks: Fallback URLs to try if primary sources fail
+            sources: Primary sources (URLs, dicts, or upstreams)
+            fallbacks: Fallback sources to try if primary sources fail
             strategy: Fetch strategy
-            http_client: HTTP client
-            params: Additional query parameters
-            headers: Additional headers
+            http_client: HTTP client for HTTP upstreams
+            params: Additional query parameters (for URL/dict sources)
+            headers: Additional headers (for URL/dict sources)
 
         Returns:
             FetchResult: Result from primary sources or fallbacks
@@ -232,13 +162,13 @@ class VastMultiSourceFetcher:
 
     async def _fetch_parallel(
         self,
-        sources: list[str | dict[str, Any]],
+        sources: list[Union[str, dict[str, Any], VastUpstream]],
         strategy: FetchStrategy,
         http_client: httpx.AsyncClient,
         params: dict[str, Any] | None,
-        headers: dict[str, str] | None,
+        headers: Union[dict[str, str], None],
     ) -> FetchResult:
-        """Fetch all sources in parallel."""
+        """Fetch all upstreams in parallel."""
         tasks = [
             self._fetch_single(source, strategy, http_client, params, headers)
             for source in sources
@@ -259,12 +189,10 @@ class VastMultiSourceFetcher:
         errors = []
         for i, result in enumerate(results):
             if isinstance(result, Exception):
-                source = sources[i]
-                if isinstance(source, str):
-                    source_repr = source
-                else:
-                    source_repr = source.get("base_url", str(source))
-                errors.append({"source": source_repr, "error": str(result)})
+                # Get source identifier
+                upstream = create_upstream(sources[i])
+                source_id = upstream.get_identifier() if hasattr(upstream, 'get_identifier') else str(sources[i])
+                errors.append({"source": source_id, "error": str(result)})
             elif result.success:
                 return result  # Return first successful result
             else:
@@ -274,13 +202,13 @@ class VastMultiSourceFetcher:
 
     async def _fetch_sequential(
         self,
-        sources: list[str | dict[str, Any]],
+        sources: list[Union[str, dict[str, Any], VastUpstream]],
         strategy: FetchStrategy,
         http_client: httpx.AsyncClient,
         params: dict[str, Any] | None,
-        headers: dict[str, str] | None,
+        headers: Union[dict[str, str], None],
     ) -> FetchResult:
-        """Fetch sources sequentially until one succeeds."""
+        """Fetch upstreams sequentially until one succeeds."""
         errors = []
         for source in sources:
             result = await self._fetch_single(
@@ -297,11 +225,11 @@ class VastMultiSourceFetcher:
 
     async def _fetch_race(
         self,
-        sources: list[str | dict[str, Any]],
+        sources: list[Union[str, dict[str, Any], VastUpstream]],
         strategy: FetchStrategy,
         http_client: httpx.AsyncClient,
         params: dict[str, Any] | None,
-        headers: dict[str, str] | None,
+        headers: Union[dict[str, str], None],
     ) -> FetchResult:
         """Race mode - return first successful response."""
         tasks = [
@@ -341,76 +269,68 @@ class VastMultiSourceFetcher:
 
     async def _fetch_single(
         self,
-        source: str | dict[str, Any],
+        source: str | dict[str, Any] | VastUpstream,
         strategy: FetchStrategy,
         http_client: httpx.AsyncClient,
         params: dict[str, Any] | None,
-        headers: dict[str, str] | None,
+        headers: Union[dict[str, str], None],
     ) -> FetchResult:
         """
-        Fetch from a single source with retry logic.
+        Fetch from a single upstream with retry logic.
 
         Args:
-            source: Source URL or dict configuration
+            source: Source (URL, dict config, or VastUpstream object)
             strategy: Fetch strategy
-            http_client: HTTP client
-            params: Additional query parameters (global)
-            headers: Additional headers (global)
+            http_client: HTTP client (for HTTP upstreams)
+            params: Additional query parameters (for URL/dict sources)
+            headers: Additional headers (for URL/dict sources)
 
         Returns:
             FetchResult: Result of the fetch operation
         """
-        # Normalize source to URL, params, and headers
+        # Create upstream from source
         try:
-            base_url, source_params, source_headers = _normalize_source(
-                source, params, headers
-            )
+            upstream = create_upstream(source)
+            source_id = upstream.get_identifier() if hasattr(upstream, 'get_identifier') else str(source)
         except (ValueError, TypeError) as e:
             return FetchResult(
                 success=False,
                 source_url=str(source),
-                errors=[{"source": str(source), "error": f"Invalid source config: {e}"}],
+                errors=[{"source": str(source), "error": f"Invalid source: {e}"}],
             )
-
-        # Build final URL with params
-        if source_params:
-            final_url = build_url_preserving_unicode(base_url, source_params)
-        else:
-            final_url = base_url
 
         # Retry logic
         last_error = None
         for attempt in range(strategy.max_retries + 1):
             try:
                 self.logger.debug(
-                    "Fetching VAST",
-                    source=base_url,
+                    "Fetching VAST from upstream",
+                    source=source_id,
                     attempt=attempt + 1,
                     max_retries=strategy.max_retries,
                 )
 
-                response = await asyncio.wait_for(
-                    http_client.get(final_url, headers=source_headers),
+                # Fetch with timeout
+                vast_xml = await asyncio.wait_for(
+                    upstream.fetch(extra_params=params, extra_headers=headers),
                     timeout=strategy.per_source_timeout,
                 )
 
-                if response.status_code == 204:
-                    self.logger.debug("Received 204 No Content", source=base_url)
+                # Check for empty content
+                if not vast_xml or not vast_xml.strip():
+                    self.logger.debug("Received empty content", source=source_id)
                     return FetchResult(
                         success=False,
-                        source_url=base_url,
-                        errors=[{"source": base_url, "error": "No content (204)"}],
+                        source_url=source_id,
+                        errors=[{"source": source_id, "error": "Empty content"}],
                     )
-
-                response.raise_for_status()
 
                 return FetchResult(
                     success=True,
-                    source_url=base_url,
-                    raw_response=response.text,
+                    source_url=source_id,
+                    raw_response=vast_xml,
                     metadata={
-                        "status_code": response.status_code,
-                        "content_length": len(response.text),
+                        "content_length": len(vast_xml),
                         "attempt": attempt + 1,
                     },
                 )
@@ -419,7 +339,7 @@ class VastMultiSourceFetcher:
                 last_error = f"Timeout after {strategy.per_source_timeout}s"
                 self.logger.warning(
                     "Fetch timeout",
-                    source=base_url,
+                    source=source_id,
                     attempt=attempt + 1,
                     timeout=strategy.per_source_timeout,
                 )
@@ -428,7 +348,7 @@ class VastMultiSourceFetcher:
                 last_error = f"HTTP {e.response.status_code}"
                 self.logger.warning(
                     "HTTP error",
-                    source=base_url,
+                    source=source_id,
                     status_code=e.response.status_code,
                     attempt=attempt + 1,
                 )
@@ -437,7 +357,7 @@ class VastMultiSourceFetcher:
                 last_error = str(e)
                 self.logger.warning(
                     "Fetch error",
-                    source=base_url,
+                    source=source_id,
                     error=str(e),
                     error_type=type(e).__name__,
                     attempt=attempt + 1,
@@ -450,8 +370,8 @@ class VastMultiSourceFetcher:
         # All retries failed
         return FetchResult(
             success=False,
-            source_url=base_url,
-            errors=[{"source": base_url, "error": last_error}],
+            source_url=source_id,
+            errors=[{"source": source_id, "error": last_error}],
         )
 
 

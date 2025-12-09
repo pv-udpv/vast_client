@@ -49,6 +49,14 @@ from .fetcher import VastMultiSourceFetcher
 from .orchestrator import VastMultiSourceOrchestrator
 from .parse_filter import VastParseFilter
 from .tracker import MultiSourceTracker
+from .upstream import (
+    BaseUpstream,
+    HttpUpstream,
+    LocalFileUpstream,
+    MockUpstream,
+    VastUpstream,
+    create_upstream,
+)
 
 __version__ = "1.0.0"
 
@@ -67,6 +75,13 @@ __all__ = [
     # Filtering
     "VastParseFilter",
     "MediaType",
+    # Upstreams
+    "VastUpstream",
+    "BaseUpstream",
+    "HttpUpstream",
+    "LocalFileUpstream",
+    "MockUpstream",
+    "create_upstream",
     # Metadata
     "__version__",
 ]

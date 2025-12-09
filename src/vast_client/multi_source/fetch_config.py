@@ -7,7 +7,10 @@ source definitions, and result structures.
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import Any, TYPE_CHECKING, Union
+
+if TYPE_CHECKING:
+    from .upstream import VastUpstream
 
 
 class FetchMode(str, Enum):
@@ -68,11 +71,11 @@ class VastFetchConfig:
     """
     Configuration for multi-source VAST fetching.
 
-    This class defines a fetch operation that can handle one or more VAST sources,
-    with optional fallback sources. Single-source requests are handled as a special
+    This class defines a fetch operation that can handle one or more VAST upstreams,
+    with optional fallback upstreams. Single-source requests are handled as a special
     case with sources=[url].
 
-    Sources can be either:
+    Sources can be:
     - Simple URL strings: "https://ads.example.com/vast"
     - Dict configurations (EmbedHttpClient-style):
       {
@@ -81,13 +84,14 @@ class VastFetchConfig:
           "headers": {"User-Agent": "Device/1.0"},
           "encoding_config": {"city": False}
       }
+    - VastUpstream protocol objects: Custom upstream implementations
 
     Attributes:
-        sources: List of primary VAST sources (URLs or dict configs)
-        fallbacks: Optional list of fallback sources (URLs or dict configs)
+        sources: List of primary VAST sources (URLs, dict configs, or VastUpstream objects)
+        fallbacks: Optional list of fallback sources (URLs, dict configs, or VastUpstream objects)
         strategy: Fetch strategy configuration
-        params: Additional query parameters to merge with all requests
-        headers: Additional headers to merge with all requests
+        params: Additional query parameters to merge with all requests (for URL/dict sources)
+        headers: Additional headers to merge with all requests (for URL/dict sources)
         parse_filter: Optional filter to apply during parsing
         auto_track: Whether to automatically track impression/start events
 
@@ -102,6 +106,11 @@ class VastFetchConfig:
         ...     "headers": {"User-Agent": "CTV-Device/1.0"}
         ... }])
 
+        With custom upstream object:
+        >>> from vast_client.multi_source import MockUpstream
+        >>> mock = MockUpstream("<VAST>...</VAST>")
+        >>> config = VastFetchConfig(sources=[mock])
+
         Multi-source with mixed types:
         >>> config = VastFetchConfig(
         ...     sources=[
@@ -109,13 +118,14 @@ class VastFetchConfig:
         ...         {  # Dict config
         ...             "base_url": "https://ads2.com/vast",
         ...             "params": {"publisher": "acme"}
-        ...         }
+        ...         },
+        ...         custom_upstream  # VastUpstream object
         ...     ],
         ...     fallbacks=["https://fallback.com/vast"],
         ...     strategy=FetchStrategy(mode=FetchMode.PARALLEL)
         ... )
 
-        With additional parameters (merged with source configs):
+        With additional parameters (merged with URL/dict sources):
         >>> config = VastFetchConfig(
         ...     sources=["https://ads.example.com/vast"],
         ...     params={"slot": "pre-roll", "publisher": "acme"},
@@ -123,8 +133,8 @@ class VastFetchConfig:
         ... )
     """
 
-    sources: list[str | dict[str, Any]] = field(default_factory=list)
-    fallbacks: list[str | dict[str, Any]] = field(default_factory=list)
+    sources: list[Union[str, dict[str, Any], "VastUpstream"]] = field(default_factory=list)
+    fallbacks: list[Union[str, dict[str, Any], "VastUpstream"]] = field(default_factory=list)
     strategy: FetchStrategy = field(default_factory=FetchStrategy)
     params: dict[str, Any] = field(default_factory=dict)
     headers: dict[str, str] = field(default_factory=dict)
