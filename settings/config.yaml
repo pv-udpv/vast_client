@@ -123,6 +123,9 @@ http:
   max_connections: 100
   max_keepalive_connections: 20
   keepalive_expiry: 5.0
+  # Tracking client overrides
+  tracking:
+    verify_ssl: false
   
   # Default headers - supports ${ad_request.property} substitution
   default_headers:
