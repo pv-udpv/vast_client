@@ -356,7 +356,7 @@ class VastClient:
             response_text = response.text
 
             self.logger.info(
-                VastEvents.REQUEST_COMPLETED,
+                VastEvents.REQUEST_SUCCESS,
                 status_code=response.status_code,
                 response_length=len(response_text),
                 vast_response_preview=response_text[:500]
