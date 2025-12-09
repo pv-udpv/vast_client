@@ -9,7 +9,8 @@ Exception Hierarchy:
     ├── VastParseError
     │   ├── VastXMLError
     │   ├── VastElementError
-    │   └── VastExtensionError
+    │   ├── VastExtensionError
+    │   └── VastDurationError
     ├── VastTrackingError
     │   ├── VastTrackingURLError
     │   └── VastTrackingNetworkError
