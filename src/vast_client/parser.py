@@ -8,7 +8,6 @@ from .events import VastEvents
 from .exceptions import (
     VastDurationError,
     VastElementError,
-    VastExtensionError,
     VastXMLError,
 )
 from .log_config import get_context_logger
@@ -155,8 +154,8 @@ class VastParser:
         Returns:
             Dictionary of parsed extensions
 
-        Raises:
-            VastExtensionError: If extension parsing fails (logged as warning)
+        Note:
+            Element parsing errors are logged as warnings and do not stop parsing.
         """
         self.logger.debug("Parsing VAST extensions")
         extensions = {}
