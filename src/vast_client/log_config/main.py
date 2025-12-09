@@ -1,6 +1,6 @@
 """Logging configuration and utilities."""
 
-import logging
+
 import structlog
 from typing import Any
 

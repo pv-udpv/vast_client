@@ -46,6 +46,16 @@ from .playback_session import (
     PlaybackEvent,
     QuartileTracker,
 )
+from .embed_http_client import EmbedHttpClient
+from .provider_config_loader import (
+    ProviderConfigLoader,
+    TemplateResolver,
+    IPPoolSelector,
+)
+from .provider_factory import (
+    build_provider_client,
+    get_provider_client,
+)
 from .time_provider import (
     TimeProvider,
     RealtimeTimeProvider,
@@ -78,6 +88,14 @@ __all__ = [
     "create_player",
     "create_real_player",
     "create_headless_player",
+    # HTTP Client
+    "EmbedHttpClient",
+    # Provider configuration (NEW)
+    "ProviderConfigLoader",
+    "TemplateResolver",
+    "IPPoolSelector",
+    "build_provider_client",
+    "get_provider_client",
     # Playback session tracking
     "PlaybackSession",
     "PlaybackStatus",

@@ -354,9 +354,39 @@ def get_default_vast_config(provider: str = "generic") -> VastClientConfig:
     """
     Get default VAST configuration for a provider.
 
+    .. deprecated:: 2.0
+        This function is deprecated in favor of YAML-based provider configurations.
+        Use :class:`ProviderConfigLoader` from :mod:`provider_config_loader` instead.
+
+        Migration example::
+
+            # Old approach
+            config = get_default_vast_config("global")
+
+            # New approach
+            from .provider_config_loader import ProviderConfigLoader
+            from .provider_factory import build_provider_client
+
+            loader = ProviderConfigLoader()
+            client = await build_provider_client("global", ad_request)
+
     Includes provider-specific tracking macros, parser settings, and
     playback interruption rules for headless mode simulation.
+
+    Warning:
+        This function contains hardcoded provider logic and will be removed
+        in a future version. New providers should be defined in YAML configuration
+        files (settings/config.yaml) instead of adding more if/elif branches here.
     """
+    import warnings
+
+    warnings.warn(
+        "get_default_vast_config() is deprecated and will be removed in v3.0. "
+        "Use YAML-based provider configurations instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
     config = VastClientConfig(provider=provider)
 
     if provider == "global":
@@ -544,7 +574,21 @@ def get_vast_config_with_publisher_overrides(
 
 
 def create_provider_config_factory(provider: str) -> Callable[..., VastClientConfig]:
-    """Create a factory function for a specific provider configuration."""
+    """
+    Create a factory function for a specific provider configuration.
+
+    .. deprecated:: 2.0
+        This function is deprecated. Use YAML-based provider configurations instead.
+        See :func:`get_default_vast_config` for migration instructions.
+    """
+    import warnings
+
+    warnings.warn(
+        f"create_provider_config_factory() is deprecated. "
+        f"Define provider '{provider}' in YAML configuration instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
 
     def factory(publisher: str | None = None, **overrides) -> VastClientConfig:
         return get_vast_config_with_publisher_overrides(
@@ -557,6 +601,8 @@ def create_provider_config_factory(provider: str) -> Callable[..., VastClientCon
 
 
 # Provider-specific factory functions
+# DEPRECATED: These will be removed in v3.0
+# Use YAML-based provider configurations instead
 global_config = create_provider_config_factory("global")
 tiger_config = create_provider_config_factory("tiger")
 leto_config = create_provider_config_factory("leto")

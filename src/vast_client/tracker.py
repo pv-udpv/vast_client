@@ -1,9 +1,9 @@
 """VAST tracking events management."""
 
+import re
 import secrets
 import time
 from typing import Any
-
 import httpx
 
 from .http_client_manager import (
@@ -20,7 +20,7 @@ from .log_config.tracing import (
 from .capabilities import has_capability, trackable_full
 from .config import VastTrackerConfig
 from .context import TrackingContext, set_tracking_context
-from .http_client import EmbedHttpClient
+from .embed_http_client import EmbedHttpClient
 from .trackable import Trackable, TrackableCollection, TrackableEvent
 
 
@@ -60,7 +60,6 @@ class VastTracker:
         self.config = config or VastTrackerConfig()
         self.tracked_events = set()
 
-        # Use contextual logger that automatically picks up context variables
         self.logger = get_context_logger("vast_tracker")
 
         # Backward compatibility: extract embed_client from ad_request if needed
@@ -133,12 +132,38 @@ class VastTracker:
 
         # 2. Extract macros from EmbedHttpClient
         if self.embed_client:
-            embed_macros = self.embed_client.get_tracking_macros()
-            macros.update(embed_macros)
+            embed_macros: dict[str, Any] = {}
+
+            # Prefer provider-aware tracking macros if available
+            if hasattr(self.embed_client, "get_tracking_macros"):
+                embed_macros = self.embed_client.get_tracking_macros()
+            elif hasattr(self.embed_client, "get_macros"):
+                embed_macros = self.embed_client.get_macros()
+
+            macros.update({k: str(v) for k, v in embed_macros.items()})
+
+            # Auto-add uppercase variants so [DEVICE_SERIAL] resolves without explicit mapping
+            for param_key, param_value in embed_macros.items():
+                macros.setdefault(param_key.upper(), str(param_value))
+
+            # Auto-build macros directly from original ad_request (if attached to the client)
+            ad_request = None
+            if hasattr(self.embed_client, "get_extra"):
+                ad_request = self.embed_client.get_extra("ad_request")
+            elif hasattr(self.embed_client, "ad_request"):
+                ad_request = getattr(self.embed_client, "ad_request")
+
+            if isinstance(ad_request, dict):
+                auto_macros = self._build_auto_macros_from_ad_request(ad_request)
+                for macro_key, macro_value in auto_macros.items():
+                    macros.setdefault(macro_key, macro_value)
 
             # Apply custom mapping from config
             for param_key, macro_key in self.config.macro_mapping.items():
-                if param_key in self.embed_client.base_params:
+                if (
+                    hasattr(self.embed_client, "base_params")
+                    and param_key in self.embed_client.base_params
+                ):
                     macros[macro_key] = str(self.embed_client.base_params[param_key])
 
         # 3. Creative macros (static for this tracker instance)
@@ -155,6 +180,29 @@ class VastTracker:
         )
 
         return macros
+
+    @staticmethod
+    def _build_auto_macros_from_ad_request(ad_request: dict[str, Any]) -> dict[str, str]:
+        """Create macro dictionary from ad_request using uppercased keys.
+
+        Generates macros like DEVICE_SERIAL for ad_request.device_serial and
+        EXT_CHANNEL_TO_DISPLAY_NAME for nested paths. Does not override
+        existing macros, leaving precedence to explicitly configured ones.
+        """
+
+        auto_macros: dict[str, str] = {}
+
+        def _walk(data: dict[str, Any], prefix: str = "") -> None:
+            for key, value in data.items():
+                path = f"{prefix}.{key}" if prefix else key
+                if isinstance(value, dict):
+                    _walk(value, path)
+                else:
+                    macro_key = path.replace(".", "_").upper()
+                    auto_macros[macro_key] = str(value)
+
+        _walk(ad_request)
+        return auto_macros
 
     def _build_dynamic_macros(self) -> dict[str, str]:
         """Build dynamic macros (generated per event).
@@ -524,13 +572,73 @@ class VastTracker:
         Returns:
             URL with macros applied
         """
-        for macro_key, macro_value in macros.items():
+        resolved_macros = dict(macros)
+
+        # Opportunistically resolve missing macros straight from ad_request for auto-access
+        missing_macros = self._extract_macro_keys(url)
+        for macro_key in missing_macros:
+            if macro_key in resolved_macros:
+                continue
+            ad_value = self._resolve_macro_from_ad_request(macro_key)
+            if ad_value is not None:
+                resolved_macros[macro_key] = str(ad_value)
+
+        for macro_key, macro_value in resolved_macros.items():
             # Apply all configured macro formats
             for format_template in self.config.macro_formats:
                 pattern = format_template.format(macro=macro_key)
                 url = url.replace(pattern, str(macro_value))
 
         return url
+
+    def _resolve_macro_from_ad_request(self, macro_key: str) -> Any:
+        """Resolve macro value directly from ad_request using common patterns.
+
+        Supports both flat access (DEVICE_SERIAL -> ad_request["device_serial"])
+        and nested access via underscore paths (EXT_DOMAIN -> ad_request["ext"]["domain"]).
+        """
+
+        if not self.embed_client:
+            return None
+
+        ad_request = None
+        if hasattr(self.embed_client, "get_extra"):
+            ad_request = self.embed_client.get_extra("ad_request")
+        elif hasattr(self.embed_client, "ad_request"):
+            ad_request = getattr(self.embed_client, "ad_request")
+
+        if not isinstance(ad_request, dict):
+            return None
+
+        # 1) Direct key lookup (device_serial)
+        direct_key = macro_key.lower()
+        if direct_key in ad_request:
+            value = ad_request[direct_key]
+            return value if not isinstance(value, dict) else None
+
+        # 2) Nested lookup by splitting underscores (EXT_DOMAIN -> ext.domain)
+        parts = direct_key.split("_")
+        current: Any = ad_request
+        for part in parts:
+            if isinstance(current, dict) and part in current:
+                current = current[part]
+            else:
+                return None
+
+        return current if not isinstance(current, dict) else None
+
+    def _extract_macro_keys(self, url: str) -> set[str]:
+        """Extract macro keys from URL based on configured macro formats."""
+
+        macro_keys: set[str] = set()
+        for format_template in self.config.macro_formats:
+            # Convert format template (e.g., "[{macro}]") into regex capturing macro name
+            escaped = re.escape(format_template).replace("\\{macro\\}", "(?P<macro>[A-Za-z0-9_]+)")
+            pattern = re.compile(escaped)
+            for match in pattern.finditer(url):
+                macro_keys.add(match.group("macro"))
+
+        return macro_keys
 
     def _create_tracking_context(
         self, url: str, request_num: int, total_requests: int, event_type: str

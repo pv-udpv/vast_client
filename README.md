@@ -61,7 +61,7 @@ print(f"Creative Duration: {ad_data.get('duration')}")
 
 ```python
 from vast_client import VastClient
-from routes.helpers import EmbedHttpClient
+from vast_client.embed_http_client import EmbedHttpClient
 
 # Create HTTP client with base configuration
 embed_client = EmbedHttpClient(
@@ -106,7 +106,7 @@ print(f"Progress: {player.progress_percent}%")
 
 ```python
 from vast_client import VastTracker
-from routes.helpers import EmbedHttpClient
+from vast_client.embed_http_client import EmbedHttpClient
 
 # Create tracker with tracking events
 tracking_events = {
@@ -303,11 +303,12 @@ HTTP client with embedded configuration for base URL, parameters, and headers.
 - Header merging
 - URL encoding configuration
 - Context-aware request building
+- Automatic tracking macro generation
 
 **Usage:**
 
 ```python
-from routes.helpers import EmbedHttpClient
+from vast_client.embed_http_client import EmbedHttpClient
 
 # Create with base configuration
 client = EmbedHttpClient(
@@ -415,9 +416,32 @@ event = TrackingEvent("impression", "https://tracking.example.com/impression?cid
 
 ### Macro Substitution
 
-Trackable objects support multiple macro formats.
+Trackable objects support multiple macro formats with automatic `ad_request` resolution.
 
-**Supported Formats:**
+**Automatic Macro Mapping (New):**
+
+The tracker now automatically resolves macros from `ad_request` without explicit configuration:
+
+```python
+# ad_request contains device_serial, user_id, etc.
+ad_request = {
+    "device_serial": "ABC-123",
+    "user_id": "user_456",
+    "ext": {
+        "channel_to": {"display_name": "HBO HD"}
+    }
+}
+
+# Tracking URL with macros
+url = "https://track.example.com?serial=[DEVICE_SERIAL]&user=[USER_ID]&channel=[EXT_CHANNEL_TO_DISPLAY_NAME]"
+
+# Macros are automatically resolved from ad_request:
+# [DEVICE_SERIAL] → ad_request["device_serial"] → "ABC-123"
+# [USER_ID] → ad_request["user_id"] → "user_456"  
+# [EXT_CHANNEL_TO_DISPLAY_NAME] → ad_request["ext"]["channel_to"]["display_name"] → "HBO HD"
+```
+
+**Manual Macro Application:**
 
 ```python
 # Format 1: [MACRO_NAME]
@@ -426,7 +450,7 @@ url = "https://tracking.example.com?cid=[CREATIVE_ID]&ts=[TIMESTAMP]"
 # Format 2: ${MACRO_NAME}
 url = "https://tracking.example.com?cid=${CREATIVE_ID}&ts=${TIMESTAMP}"
 
-# Apply macros
+# Apply macros manually
 macros = {
     "CREATIVE_ID": "creative_123",
     "TIMESTAMP": "1701234567"
@@ -435,6 +459,13 @@ macros = {
 result = event.apply_macros(macros, ["[{macro}]", "${{{macro}}}"])
 # Result: https://tracking.example.com?cid=creative_123&ts=1701234567
 ```
+
+**Macro Resolution Priority:**
+
+1. Explicitly provided macros via `macros` parameter
+2. Embed client tracking macros (from `get_tracking_macros()`)
+3. Auto-resolved from `ad_request` (flat and nested paths)
+4. Static macros from configuration
 
 ### Dependency Injection
 
@@ -559,6 +590,14 @@ from vast_client.config import VastTrackerConfig
 config = VastTrackerConfig(
     # Macro formats (order matters - most specific first)
     macro_formats=["[{macro}]", "${{{macro}}}"],
+    
+    # Macro mapping (parameter_name: MACRO_NAME)
+    # Auto-resolves from ad_request without template strings
+    macro_mapping={
+        "device_serial": "DEVICE_SERIAL",      # Auto: ad_request.device_serial
+        "user_id": "USER_ID",                  # Auto: ad_request.user_id
+        "ext.channel_to.display_name": "CHANNEL_NAME"  # Auto: nested path
+    },
     
     # Tracking options
     track_errors=True,
@@ -752,15 +791,25 @@ async with httpx.AsyncClient() as http_client:
     ad2 = await client.request_ad(params={"placement": "midroll"})
 ```
 
-### 5. Macro Safety
+### 5. Macro Configuration
 
-Validate macro substitution:
+Leverage automatic macro resolution:
 
 ```python
-# Good: Provide all required macros
-event = TrackableEvent("impression", "https://...?cid=[CREATIVE_ID]")
-macros = {"CREATIVE_ID": "creative_123"}
-urls = event.apply_macros(macros, ["[{macro}]"])
+# Good: Use auto-resolution from ad_request
+tracker = VastTracker(
+    tracking_events={
+        "impression": "https://track.example.com?serial=[DEVICE_SERIAL]"
+    },
+    embed_client=embed_client  # Contains ad_request
+)
+# [DEVICE_SERIAL] automatically resolves from ad_request.device_serial
+
+# Also good: Provide explicit macros for non-ad_request values
+await tracker.track_event("impression", macros={
+    "CREATIVE_ID": "creative_123",
+    "TIMESTAMP": str(int(time.time()))
+})
 
 # Safe: Handle missing macros
 if "CREATIVE_ID" not in macros:
@@ -775,7 +824,7 @@ if "CREATIVE_ID" not in macros:
 import asyncio
 import httpx
 from vast_client import VastClient, VastPlayer
-from routes.helpers import EmbedHttpClient
+from vast_client.embed_http_client import EmbedHttpClient
 
 async def complete_vast_workflow():
     """Complete VAST ad workflow with request, playback, and tracking."""
