@@ -8,7 +8,6 @@ from .events import VastEvents
 from .exceptions import (
     VastDurationError,
     VastElementError,
-    VastExtensionError,
     VastXMLError,
 )
 from .log_config import get_context_logger
@@ -245,8 +244,9 @@ class VastParser:
             return None
         except VastDurationError as e:
             self.logger.warning(
-                f"Failed to parse duration: {e.message}",
+                "Failed to parse duration",
                 error=str(e),
+                message=e.message,
                 duration_text=e.duration_text,
             )
             return None
