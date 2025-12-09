@@ -137,7 +137,7 @@ The main facade for VAST operations. Supports multiple initialization patterns.
 **Features:**
 - Flexible configuration (URL string, dict, VastClientConfig)
 - Automatic HTTP client management
-- Context-aware logging with correlation IDs
+- **Enhanced logging with request IDs, aggregation, and hierarchical context**
 - Integration with parser, tracker, and player
 
 **Initialization Methods:**
@@ -657,9 +657,81 @@ For detailed SSL configuration guide, see [SSL_VERIFICATION_GUIDE.md](SSL_VERIFI
 
 ## Logging and Monitoring
 
-The package integrates with the centralized logging system.
+The package provides **enhanced logging infrastructure** with request ID correlation, hierarchical context, and namespace aggregation.
 
-**Automatic Context Variables:**
+### New Logging Architecture (v1.0.0+)
+
+**Key Features:**
+- ✅ **Request ID Correlation** - All logs from a single operation share a unique `request_id`
+- ✅ **Hierarchical Context** - Parent-child relationships via `span_id` and `parent_id`
+- ✅ **Namespace Aggregation** - Related fields grouped under `vast_event`, `trackable`, `result`, etc.
+- ✅ **Sampling Control** - Configurable debug sampling (random or deterministic)
+- ✅ **Async Propagation** - Context automatically propagates through async calls
+
+**Quick Example:**
+
+```python
+from vast_client.logging import LoggingContext, VastLoggingConfig, set_logging_config
+
+# Configure logging behavior
+config = VastLoggingConfig(
+    level="INFO",
+    debug_sample_rate=0.1,  # Sample 10% of debug logs
+    sampling_strategy="deterministic",
+    operation_levels={
+        "track_event": "INFO",
+        "send_trackable": "DEBUG"
+    }
+)
+set_logging_config(config)
+
+# Automatic in VastTracker
+tracker = VastTracker(tracking_events, creative_id="creative-123")
+await tracker.track_event("impression")  # Uses LoggingContext internally
+```
+
+**Log Output:**
+
+```json
+{
+  "request_id": "a1b2c3d4e5f6",
+  "span_id": "f6e5d4c3b2a1",
+  "operation": "track_event",
+  "vast_event": {"type": "impression", "creative_id": "creative-123"},
+  "result": {
+    "success": true,
+    "duration": 0.234,
+    "successful_trackables": 2,
+    "total_trackables": 2
+  }
+}
+```
+
+**Manual Usage:**
+
+```python
+from vast_client.logging import LoggingContext
+from vast_client.log_config import get_context_logger
+
+logger = get_context_logger("my_module")
+
+async with LoggingContext(operation="custom_op") as ctx:
+    ctx.vast_event = {"type": "custom"}
+    logger.info("started", **ctx.to_log_dict())
+    
+    # Do work
+    ctx.result["items_processed"] = 10
+    
+    logger.info("completed", **ctx.to_log_dict())
+```
+
+**See Also:**
+- 📖 Full documentation: `src/vast_client/docs/LOGGING_ARCHITECTURE.md`
+- 🔬 Demo script: `examples/logging_demo.py`
+
+### Legacy Context Variables (Deprecated)
+
+The older context variable system is still supported for backward compatibility:
 
 ```python
 from vast_client import VastClient

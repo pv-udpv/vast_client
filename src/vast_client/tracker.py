@@ -17,6 +17,7 @@ from .log_config.tracing import (
     propagate_trace_headers,
     should_propagate_to_service,
 )
+from .logging import LoggingContext, get_logging_config
 from .capabilities import has_capability, trackable_full
 from .config import VastTrackerConfig
 from .context import TrackingContext, set_tracking_context
@@ -287,185 +288,209 @@ class VastTracker:
             event: Event name to track
             macros: Additional macros for URL substitution
         """
-        # Ensure HTTP client is available for trackable sends
-        if self.client is None:
-            self.client = get_tracking_http_client()
-            self.context.http_client = self.client
+        # Create logging context for this tracking operation
+        log_config = get_logging_config()
+        async with LoggingContext(
+            operation="track_event",
+            vast_event={"type": event, "creative_id": self.creative_id}
+        ) as log_ctx:
+            # Ensure HTTP client is available for trackable sends
+            if self.client is None:
+                self.client = get_tracking_http_client()
+                self.context.http_client = self.client
 
-        # Get the list of trackable objects for this event
-        trackables = self.events.get(event, [])
-        self.logger.debug(
-            "Preparing to track event", event_type=event, creative_id=self.creative_id
-        )
-        if not trackables:
-            self.logger.warning(
-                "Event not found in tracking events",
-                event_type=event,
-                creative_id=self.creative_id,
-                available_events=list(self.events.keys()),
+            # Get the list of trackable objects for this event
+            trackables = self.events.get(event, [])
+            
+            # Check if we should log debug based on configuration
+            should_debug = log_config.should_log_debug(
+                operation="track_event", 
+                request_id=log_ctx.request_id
             )
-            return
+            
+            if should_debug:
+                self.logger.debug(
+                    "Preparing to track event",
+                    **log_ctx.to_log_dict()
+                )
+            
+            if not trackables:
+                self.logger.warning(
+                    "Event not found in tracking events",
+                    **log_ctx.to_log_dict(),
+                    available_events=list(self.events.keys()),
+                )
+                return
 
-        # Build final macros: static + dynamic + additional
-        dynamic_macros = self._build_dynamic_macros()
-        final_macros = {
-            **self.static_macros,  # Static macros (frozen)
-            **dynamic_macros,  # Dynamic macros (fresh)
-            **(macros or {}),  # Additional macros (override)
-        }
+            # Build final macros: static + dynamic + additional
+            dynamic_macros = self._build_dynamic_macros()
+            final_macros = {
+                **self.static_macros,  # Static macros (frozen)
+                **dynamic_macros,  # Dynamic macros (fresh)
+                **(macros or {}),  # Additional macros (override)
+            }
 
-        self.logger.debug(
-            "Tracking event started",
-            event_type=event,
-            creative_id=self.creative_id,
-            trackables_count=len(trackables),
-            static_macros_count=len(self.static_macros),
-            dynamic_macros_count=len(dynamic_macros),
-            total_macros_count=len(final_macros),
-            capabilities=[getattr(t, "__capabilities__", set()) for t in trackables],
-        )
+            if should_debug:
+                self.logger.debug(
+                    "Tracking event started",
+                    **log_ctx.to_log_dict(),
+                    trackables_count=len(trackables),
+                    static_macros_count=len(self.static_macros),
+                    dynamic_macros_count=len(dynamic_macros),
+                    total_macros_count=len(final_macros),
+                    capabilities=[getattr(t, "__capabilities__", set()) for t in trackables],
+                )
 
-        # Track the event using all registered Trackables
-        start_time = time.time()
-        results = []
-        processed_events = []  # Collect structured event data for logging
+            # Track the event using all registered Trackables
+            start_time = time.time()
+            results = []
+            processed_events = []  # Collect structured event data for logging
 
-        try:
-            # Send tracking requests via each Trackable
-            for i, trackable in enumerate(trackables):
-                event_info = {
-                    "event_key": trackable.key,
-                    "event_type": event,
-                    "event_url": None,
-                    "status_code": None,
-                    "error": None,
-                    "success": False,
-                }
+            try:
+                # Send tracking requests via each Trackable
+                for i, trackable in enumerate(trackables):
+                    # Create nested context for each trackable
+                    async with LoggingContext(
+                        parent_id=log_ctx.span_id,
+                        operation="send_trackable",
+                        trackable={"index": i, "key": trackable.key}
+                    ) as trackable_ctx:
+                        event_info = {
+                            "event_key": trackable.key,
+                            "event_type": event,
+                            "event_url": None,
+                            "status_code": None,
+                            "error": None,
+                            "success": False,
+                        }
 
-                try:
-                    # Extract URL for logging
-                    url = self._get_trackable_url(trackable, final_macros)
-                    event_info["event_url"] = url
+                        try:
+                            # Extract URL for logging
+                            url = self._get_trackable_url(trackable, final_macros)
+                            event_info["event_url"] = url
+                            trackable_ctx.set_namespace("http", url=url)
 
-                    # Check if Trackable has http_send capability
-                    if has_capability(trackable, "http_send"):
-                        # Use Trackable's send_with method
-                        success = await trackable.send_with(self.client, final_macros)
-                        results.append(success)
-                        event_info["success"] = success
+                            # Check if Trackable has http_send capability
+                            if has_capability(trackable, "http_send"):
+                                # Use Trackable's send_with method
+                                success = await trackable.send_with(self.client, final_macros)
+                                results.append(success)
+                                event_info["success"] = success
+                                
+                                # Update result in context
+                                trackable_ctx.result["success"] = success
 
-                        # Extract status code if available from trackable state
-                        if has_capability(trackable, "state"):
-                            event_info["status_code"] = trackable.get_extra("last_status_code")
+                                # Extract status code if available from trackable state
+                                if has_capability(trackable, "state"):
+                                    status_code = trackable.get_extra("last_status_code")
+                                    event_info["status_code"] = status_code
+                                    trackable_ctx.set_namespace("http", status_code=status_code)
 
-                        # Log individual Trackable result
-                        if success:
-                            self.logger.debug(
-                                "Trackable sent successfully",
-                                event_type=event,
-                                creative_id=self.creative_id,
-                                trackable_index=i,
-                                trackable_key=trackable.key,
-                                **trackable.to_log_dict()
-                                if has_capability(trackable, "logging")
-                                else {},
+                                # Log individual Trackable result with context
+                                should_debug_trackable = log_config.should_log_debug(
+                                    operation="send_trackable",
+                                    request_id=trackable_ctx.request_id
+                                )
+                                
+                                if success:
+                                    if should_debug_trackable:
+                                        self.logger.debug(
+                                            "Trackable sent successfully",
+                                            **trackable_ctx.to_log_dict(),
+                                            **trackable.to_log_dict()
+                                            if has_capability(trackable, "logging")
+                                            else {},
+                                        )
+                                else:
+                                    has_state = has_capability(trackable, "state")
+                                    error_msg = trackable.get_extra("last_error") if has_state else None
+
+                                    if not error_msg:
+                                        # Ensure a reason is recorded even if the trackable didn't set one
+                                        error_msg = "unknown_failure"
+                                        if has_state:
+                                            trackable.set_extra("last_error", error_msg)
+
+                                    event_info["error"] = error_msg
+                                    trackable_ctx.result["error"] = error_msg
+                                    event_info["capabilities"] = list(
+                                        getattr(trackable, "__capabilities__", set())
+                                    )
+                                    # Capture status and attempts when available to debug "failed completely" cases
+                                    event_info["status_code"] = trackable.get_extra("last_status_code")
+                                    event_info["attempt_count"] = (
+                                        trackable.get_extra("attempt_count") or 0 if has_state else 0
+                                    )
+
+                                    if should_debug_trackable:
+                                        self.logger.debug(
+                                            "Trackable send failed",
+                                            **trackable_ctx.to_log_dict(),
+                                            **trackable.to_log_dict()
+                                            if has_capability(trackable, "logging")
+                                            else {},
+                                        )
+                            else:
+                                # Fallback: use legacy URL-based sending
+                                await self._send_legacy_trackable(trackable, final_macros, event, i)
+                                results.append(True)  # Assume success for legacy method
+                                event_info["success"] = True
+                                trackable_ctx.result["success"] = True
+
+                        except Exception as e:
+                            results.append(False)
+                            event_info["error"] = str(e)
+                            trackable_ctx.result["success"] = False
+                            trackable_ctx.result["error"] = str(e)
+                            self.logger.error(
+                                "Trackable tracking failed",
+                                **trackable_ctx.to_log_dict(),
+                                error=str(e),
+                                **trackable.to_log_dict() if has_capability(trackable, "logging") else {},
                             )
-                        else:
-                            has_state = has_capability(trackable, "state")
-                            error_msg = trackable.get_extra("last_error") if has_state else None
+                        finally:
+                            processed_events.append(event_info)
 
-                            if not error_msg:
-                                # Ensure a reason is recorded even if the trackable didn't set one
-                                error_msg = "unknown_failure"
-                                if has_state:
-                                    trackable.set_extra("last_error", error_msg)
+                # Check overall success and update result in context
+                successful_count = sum(results)
+                total_count = len(trackables)
+                
+                # Update result namespace with aggregated metrics
+                log_ctx.result.update({
+                    "success": successful_count == total_count,
+                    "duration": time.time() - start_time,
+                    "successful_trackables": successful_count,
+                    "total_trackables": total_count,
+                })
 
-                            event_info["error"] = error_msg
-                            event_info["capabilities"] = list(
-                                getattr(trackable, "__capabilities__", set())
-                            )
-                            # Capture status and attempts when available to debug "failed completely" cases
-                            event_info["status_code"] = trackable.get_extra("last_status_code")
-                            event_info["attempt_count"] = (
-                                trackable.get_extra("attempt_count") or 0 if has_state else 0
-                            )
-
-                            self.logger.debug(
-                                "Trackable send failed",
-                                event_type=event,
-                                creative_id=self.creative_id,
-                                trackable_index=i,
-                                trackable_key=trackable.key,
-                                **trackable.to_log_dict()
-                                if has_capability(trackable, "logging")
-                                else {},
-                            )
-                    else:
-                        # Fallback: use legacy URL-based sending
-                        await self._send_legacy_trackable(trackable, final_macros, event, i)
-                        results.append(True)  # Assume success for legacy method
-                        event_info["success"] = True
-
-                except Exception as e:
-                    results.append(False)
-                    event_info["error"] = str(e)
-                    self.logger.error(
-                        "Trackable tracking failed",
-                        event_type=event,
-                        creative_id=self.creative_id,
-                        trackable_index=i,
-                        trackable_key=trackable.key,
-                        error=str(e),
-                        **trackable.to_log_dict() if has_capability(trackable, "logging") else {},
+                if successful_count == total_count:
+                    self.logger.info(
+                        "Event tracked successfully",
+                        **log_ctx.to_log_dict(),
+                        processed_events=processed_events,
                     )
-                finally:
-                    processed_events.append(event_info)
+                elif successful_count > 0:
+                    self.logger.warning(
+                        "Event tracked partially",
+                        **log_ctx.to_log_dict(),
+                        processed_events=processed_events,
+                    )
+                else:
+                    self.logger.warning(
+                        "Event tracking failed completely",
+                        **log_ctx.to_log_dict(),
+                        processed_events=processed_events,
+                    )
 
-            # Check overall success
-            successful_count = sum(results)
-            total_count = len(trackables)
-
-            if successful_count == total_count:
-                self.logger.info(
-                    "Event tracked successfully",
-                    event_type=event,
-                    creative_id=self.creative_id,
-                    response_time=time.time() - start_time,
-                    successful_trackables=successful_count,
-                    total_trackables=total_count,
-                    processed_events=processed_events,
-                )
-            elif successful_count > 0:
+            except Exception as e:
+                log_ctx.result["success"] = False
+                log_ctx.result["error"] = str(e)
                 self.logger.warning(
-                    "Event tracked partially",
-                    event_type=event,
-                    creative_id=self.creative_id,
-                    response_time=time.time() - start_time,
-                    successful_trackables=successful_count,
-                    total_trackables=total_count,
-                    processed_events=processed_events,
+                    "Event tracking failed",
+                    **log_ctx.to_log_dict(),
+                    error=str(e),
                 )
-            else:
-                self.logger.warning(
-                    "Event tracking failed completely",
-                    event_type=event,
-                    creative_id=self.creative_id,
-                    response_time=time.time() - start_time,
-                    successful_trackables=successful_count,
-                    total_trackables=total_count,
-                    processed_events=processed_events,
-                )
-
-        except Exception as e:
-            self.logger.warning(
-                "Event tracking failed",
-                event_type=event,
-                creative_id=self.creative_id,
-                error=str(e),
-                successful_trackables=sum(results),
-                total_trackables=len(trackables),
-            )
-            raise
+                raise
 
     def _get_trackable_url(self, trackable: Trackable, macros: dict[str, str]) -> str | None:
         """Extract and process URL from a trackable object.
