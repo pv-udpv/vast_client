@@ -76,7 +76,7 @@ def _load_http_config(kind: str) -> dict[str, Any]:
         "max_keepalive_connections": _get(
             "max_keepalive_connections", 10 if kind == "main" else 20
         ),
-        "keepalive_expiry": _get("keepalive_expiry", 5.0),
+        "keepalive_expiry": _get("keepalive_expiry", 30.0 if kind == "main" else 300.0),
         # Default to verifying SSL for main client, but tracking defaults to False
         # so we can continue firing pixels even if the endpoint has a bad cert.
         "verify": _get("verify_ssl", True if kind == "main" else False),

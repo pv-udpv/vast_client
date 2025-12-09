@@ -122,10 +122,11 @@ http:
   timeout: 30.0
   max_connections: 100
   max_keepalive_connections: 20
-  keepalive_expiry: 5.0
+  keepalive_expiry: 30.0
   # Tracking client overrides
   tracking:
     verify_ssl: false
+    keepalive_expiry: 300.0
   
   # Default headers - supports ${ad_request.property} substitution
   default_headers:
@@ -228,11 +229,107 @@ logging:
 providers:
   # AdStream Global
   global:
+    # Provider metadata
+    name: "AdStream Global"
+    description: "AdStream Global CTV advertising integration"
+    
+    # HTTP Client Configuration
+    http_client:
+      base_url: "https://g.adstrm.ru/vast3"
+      
+      # Static parameters (always sent)
+      base_params:
+        media_type: "stream"
+        city: "Санкт-Петербург"
+        city_code: 812
+      
+      # Dynamic parameters (template syntax)
+      dynamic_params:
+        ab_uid: "${device_serial}"
+        ad_place: "${placement_type|switchroll}"
+        media_title: "${channel.display_name}"
+        media_tag: "${channel.iptvorg_categories}"
+      
+      # Static headers
+      base_headers:
+        Accept: "application/xml, text/xml, */*"
+      
+      # Dynamic headers (template syntax)
+      dynamic_headers:
+        User-Agent: "${user_agent}"
+        X-Serial-Number: "${device_serial}"
+        X-Real-Ip: "${selected_ip}"
+        X-Forwarded-For: "${selected_ip}"
+      
+      # Encoding configuration
+      encoding_config:
+        city: false  # Keep Cyrillic
+        ab_uid: false
+        ad_place: false
+        media_type: false
+        media_title: false
+        media_tag: false
+        city_code: false
+    
+    # IP Pool Configuration
+    ip_pools:
+      - name: "AT-HOME"
+        strategy: "random"
+        ips:
+          - "213.21.4.190"
+          - "213.21.14.29"
+          - "213.21.19.169"
+          - "77.239.236.16"
+          - "77.239.236.17"
+          - "77.239.236.18"
+          - "77.239.236.19"
+          - "77.239.236.20"
+          - "77.239.236.21"
+          - "77.239.236.22"
+          - "77.239.236.23"
+          - "77.239.236.24"
+          - "77.239.236.25"
+          - "77.239.236.26"
+          - "77.239.236.27"
+          - "77.239.236.28"
+          - "77.239.236.29"
+          - "77.239.236.30"
+          - "77.239.236.31"
+          - "77.239.236.32"
+          - "77.239.236.33"
+          - "77.239.236.34"
+          - "77.239.236.35"
+          - "77.239.236.36"
+        fallback: "213.21.4.190"
+    
+    # Context Preparation
+    context_preparation:
+      # Device serial generation
+      device_serial:
+        type: "uuid_multi_fields"
+        fields:
+          - "GLOBAL"  # Static prefix
+          - "device_macaddr"  # From ad_request
+          - "user_agent"
+          - "ext.domain"
+      
+      # Channel data extraction
+      channel_extraction:
+        display_name: "ext.channel_to.display_name"
+        iptvorg_categories: "ext.channel_to.iptvorg_categories"
+      
+      # IP selection
+      ip_selection:
+        pool: "AT-HOME"
+        fallback: "213.21.4.190"
+    
     tracker:
       macro_mapping:
-        city: CITY
-        city_code: CITY_CODE
-        device_serial: "${ad_request.device_serial}"
+        # Auto-mapping: param_name: MACRO_NAME maps to ad_request.param_name
+        # Only list custom mappings that differ from ad_request.param_name pattern
+        city: CITY  # Maps to ad_request.city
+        city_code: CITY_CODE  # Maps to ad_request.city_code
+        device_serial: DEVICE_SERIAL  # Maps to ad_request.device_serial
       static_macros:
         AD_SERVER: "AdStream Global"
     
@@ -265,11 +362,106 @@ providers:
   
   # AdStream Tiger
   tiger:
+    # Provider metadata
+    name: "AdStream Tiger"
+    description: "AdStream Tiger CTV advertising integration"
+    
+    # HTTP Client Configuration
+    http_client:
+      base_url: "https://t.adstrm.ru/vast3"
+      
+      # Static parameters
+      base_params:
+        media_type: "stream"
+        city_name: "Санкт-Петербург"
+        city_code: 812
+      
+      # Dynamic parameters
+      dynamic_params:
+        ab_uid: "${device_serial}"
+        ad_place: "${placement_type|switchroll}"
+        media_title: "${channel.display_name}"
+        media_tag: "${channel.iptvorg_categories}"
+      
+      # Static headers
+      base_headers:
+        Accept: "application/xml, text/xml, */*"
+      
+      # Dynamic headers
+      dynamic_headers:
+        User-Agent: "${user_agent}"
+        X-Serial-Number: "${device_serial}"
+        X-Real-Ip: "${selected_ip}"
+        X-Forwarded-For: "${selected_ip}"
+      
+      # Encoding configuration
+      encoding_config:
+        city_name: false
+        ab_uid: false
+        ad_place: false
+        media_type: false
+        media_title: false
+        media_tag: false
+        city_code: false
+    
+    # IP Pool Configuration (shared with global)
+    ip_pools:
+      - name: "AT-HOME"
+        strategy: "random"
+        ips:
+          - "213.21.4.190"
+          - "213.21.14.29"
+          - "213.21.19.169"
+          - "77.239.236.16"
+          - "77.239.236.17"
+          - "77.239.236.18"
+          - "77.239.236.19"
+          - "77.239.236.20"
+          - "77.239.236.21"
+          - "77.239.236.22"
+          - "77.239.236.23"
+          - "77.239.236.24"
+          - "77.239.236.25"
+          - "77.239.236.26"
+          - "77.239.236.27"
+          - "77.239.236.28"
+          - "77.239.236.29"
+          - "77.239.236.30"
+          - "77.239.236.31"
+          - "77.239.236.32"
+          - "77.239.236.33"
+          - "77.239.236.34"
+          - "77.239.236.35"
+          - "77.239.236.36"
+        fallback: "213.21.4.190"
+    
+    # Context Preparation
+    context_preparation:
+      # Device serial generation
+      device_serial:
+        type: "uuid_multi_fields"
+        fields:
+          - "TIGER"  # Static prefix
+          - "device_macaddr"
+          - "user_agent"
+          - "ext.domain"
+      
+      # Channel data extraction
+      channel_extraction:
+        display_name: "ext.channel_to.display_name"
+        iptvorg_categories: "ext.channel_to.iptvorg_categories"
+      
+      # IP selection
+      ip_selection:
+        pool: "AT-HOME"
+        fallback: "213.21.4.190"
+    
     tracker:
       macro_mapping:
+        # Auto-mapping with ad_request base path
         city_name: CITY
         city_code: CITY_CODE
-        device_serial: "${ad_request.device_serial}"
+        device_serial: DEVICE_SERIAL
       static_macros:
         AD_SERVER: "AdStream Tiger"
     
@@ -298,15 +490,66 @@ providers:
   
   # Leto
   leto:
+    # Provider metadata
+    name: "Leto (Rambler SSP)"
+    description: "Rambler SSP integration for CTV advertising"
+    
+    # HTTP Client Configuration
+    http_client:
+      base_url: "https://ssp.rambler.ru/vapirs"
+      
+      # Static parameters
+      base_params:
+        wl: "rambler"
+        pad_id: "579447018"
+        block_id: "579447026"
+      
+      # Dynamic parameters with JSON support
+      dynamic_params:
+        jparams:
+          type: "json"  # Auto-serialize to JSON
+          value:
+            puid8: "10"
+            puid25: "iptvportal"
+        ab_uid: "${device_serial}"
+      
+      # Static headers
+      base_headers:
+        Accept: "application/xml, text/xml, */*"
+      
+      # Dynamic headers
+      dynamic_headers:
+        User-Agent: "${user_agent}"
+      
+      # Encoding configuration
+      encoding_config:
+        wl: false
+        pad_id: false
+        block_id: false
+        jparams: false
+        ab_uid: false
+    
+    # Context Preparation
+    context_preparation:
+      # Device serial generation
+      device_serial:
+        type: "uuid_multi_fields"
+        fields:
+          - "LETO"
+          - "device_macaddr"
+          - "user_agent"
+          - "ext.domain"
+    
     tracker:
       macro_formats:
         - "%%{macro}%%"
         - "[{macro}]"
       macro_mapping:
+        # Auto-mapping with ad_request base path
         wl: WL
         pad_id: PAD_ID
         block_id: BLOCK_ID
-        device_serial: "${ad_request.device_serial}"
+        device_serial: DEVICE_SERIAL
       static_macros:
         AD_SERVER: "Leto"
     
@@ -333,17 +576,73 @@ providers:
           min_offset_sec: -5
           max_offset_sec: 0
   
-  # Yandex Direct
+  # Yandex Direct (AdFox)
   yandex:
+    # Provider metadata
+    name: "Yandex AdFox"
+    description: "Yandex AdFox advertising integration"
+    
+    # HTTP Client Configuration
+    http_client:
+      base_url: "https://yandex.ru/ads/adfox/721500/getCodeTest"
+      
+      # Static parameters
+      base_params:
+        puid3: "10"
+        puid6: "1"
+        puid8: "2"
+        puid10: "3"
+        puid12: "iptvportal"
+        puid21: "1"
+        puid26: "0"
+        puid46: "1"
+      
+      # Dynamic parameters
+      dynamic_params:
+        puid1: "${device_serial}"
+      
+      # Static headers
+      base_headers:
+        Accept: "application/xml, text/xml, */*"
+        X-Adfox-S2s-Key: "532362591180161028"
+      
+      # Dynamic headers
+      dynamic_headers:
+        User-Agent: "${user_agent}"
+      
+      # Encoding configuration
+      encoding_config:
+        puid1: false
+        puid3: false
+        puid6: false
+        puid8: false
+        puid10: false
+        puid12: false
+        puid21: false
+        puid26: false
+        puid46: false
+    
+    # Context Preparation
+    context_preparation:
+      # Device serial generation
+      device_serial:
+        type: "uuid_multi_fields"
+        fields:
+          - "ADFOX"
+          - "device_macaddr"
+          - "user_agent"
+          - "ext.domain"
+    
     tracker:
       macro_formats:
         - "{macro}"
         - "[{macro}]"
       macro_mapping:
+        # Auto-mapping with ad_request base path
         yandex_uid: YANDEX_UID
         campaign_id: CAMPAIGN_ID
         banner_id: BANNER_ID
-        device_serial: "${ad_request.device_serial}"
+        device_serial: DEVICE_SERIAL
       static_macros:
         AD_SERVER: "Yandex Direct"
     
@@ -377,9 +676,10 @@ providers:
         - "%%{macro}%%"
         - "[{macro}]"
       macro_mapping:
+        # Auto-mapping with ad_request base path
         google_gid: GOOGLE_GID
         google_cust_params: GOOGLE_CUST_PARAMS
-        device_serial: "${ad_request.device_serial}"
+        device_serial: DEVICE_SERIAL
       static_macros:
         AD_SERVER: "Google AdSense"
     
