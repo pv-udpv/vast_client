@@ -16,6 +16,18 @@ from lxml import etree
 import json
 from dataclasses import dataclass
 from enum import Enum
+import sys
+import os
+
+# Add src directory to path to import from vast_client
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+
+try:
+    from vast_client.log_config import get_context_logger
+    from vast_client.events import VastEvents
+    LOGGING_AVAILABLE = True
+except ImportError:
+    LOGGING_AVAILABLE = False
 
 
 class MergeStrategy(Enum):
@@ -48,6 +60,10 @@ class VASTParser:
     NAMESPACES = {"vast": "http://www.iab.com/VAST"}
     
     def __init__(self, namespaces: Optional[Dict] = None):
+        if LOGGING_AVAILABLE:
+            self.logger = get_context_logger("vast_parser")
+        else:
+            self.logger = None
         self.namespaces = namespaces or self.NAMESPACES
     
     def parse(self, xml_string: str) -> Dict[str, Any]:
@@ -58,6 +74,9 @@ class VASTParser:
         
         This is for backward compatibility with existing code
         """
+        if self.logger:
+            self.logger.debug("parse_started", xml_length=len(xml_string))
+        
         root = etree.fromstring(xml_string.encode('utf-8'))
         result = {}
         
@@ -78,6 +97,14 @@ class VASTParser:
                 }
                 for t in tracking
             ]
+        
+        if self.logger:
+            self.logger.debug(
+                "parse_completed",
+                impressions_count=len(impressions),
+                errors_count=len(errors),
+                tracking_count=len(tracking)
+            )
         
         return result
     
@@ -104,12 +131,18 @@ class EnhancedVASTParser(VASTParser):
     
     def parse(self, xml_string: str) -> Dict[str, Any]:
         """Parse VAST XML with config, filtering, and sorting"""
+        if self.logger:
+            self.logger.debug("enhanced_parse_started", xml_length=len(xml_string), config_sections=list(self.config.keys()))
+        
         root = etree.fromstring(xml_string.encode('utf-8'))
         result = {}
         
         for section, rules in self.config.items():
             for key, rule in rules.items():
                 self._process_rule(root, section, key, rule, result)
+        
+        if self.logger:
+            self.logger.debug("enhanced_parse_completed", result_keys=list(result.keys()))
         
         return result
     
@@ -135,11 +168,8 @@ class EnhancedVASTParser(VASTParser):
         try:
             elements = root.xpath(xpath, namespaces=self.namespaces)
         except etree.XPathEvalError as e:
-            if hasattr(self, "logger"):
-                self.logger.error("xpath_eval_failed", xpath=xpath, error=str(e))
-            else:
-                # Fallback: print or ignore if logger not present
-                pass
+            if self.logger:
+                self.logger.error("xpath_eval_failed", section=section, key=key, xpath=xpath, error=str(e))
             return
         if not elements:
             return
@@ -215,7 +245,7 @@ class EnhancedVASTParser(VASTParser):
                 val = elem.get(part[1:]) or "?"
                 values.append(val)
             else:
-                values.append(part.strip("'\"")
+                values.append(part.strip("'\""))
         
         return "".join(values)
     
