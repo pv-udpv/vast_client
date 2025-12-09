@@ -171,9 +171,10 @@ class VastParser:
                         self.logger.debug("Parsed extension", type=type_attr)
                     except VastElementError as e:
                         self.logger.warning(
-                            f"Failed to parse extension of type {type_attr}: {e.message}",
+                            "Failed to parse extension",
                             error=str(e),
                             extension_type=type_attr,
+                            message=e.message,
                         )
                         # Continue parsing other extensions
                         continue
@@ -191,9 +192,9 @@ class VastParser:
                             field_name=field_name,
                             values_count=len(extensions[field_name])
                         )
-                except (ValueError, etree.XPathError) as e:
+                except ValueError as e:
                     self.logger.warning(
-                        f"Failed to parse custom XPath field {field_name}: {str(e)}",
+                        "Failed to parse custom XPath field",
                         error=str(e),
                         field_name=field_name,
                     )
@@ -202,14 +203,14 @@ class VastParser:
 
         except etree.XPathError as e:
             self.logger.warning(
-                f"XPath error while parsing extensions: {str(e)}",
+                "XPath error while parsing extensions",
                 error=str(e),
             )
             # Return partial results
         except Exception as e:
             # Catch any remaining unexpected errors
             self.logger.error(
-                f"Unexpected error while parsing extensions: {str(e)}",
+                "Unexpected error while parsing extensions",
                 error=str(e),
             )
             # Return partial results - extensions are not critical
@@ -252,7 +253,7 @@ class VastParser:
             return None
         except Exception as e:
             self.logger.warning(
-                f"Unexpected error while finding duration element: {str(e)}",
+                "Unexpected error while finding duration element",
                 error=str(e),
             )
             return None
@@ -319,18 +320,14 @@ class VastParser:
                     else:
                         try:
                             result[child.tag] = self.element_to_dict(child)
-                        except VastElementError:
-                            # Re-raise VastElementErrors
-                            raise
                         except Exception as e:
+                            if isinstance(e, VastElementError):
+                                raise
                             raise VastElementError(
                                 f"Failed to recursively convert child element: {str(e)}",
                                 element_tag=child.tag,
                                 operation="recursive_conversion",
                             ) from e
-        except VastElementError:
-            # Re-raise VastElementErrors
-            raise
         except AttributeError as e:
             raise VastElementError(
                 f"Invalid element structure: {str(e)}",
@@ -338,6 +335,8 @@ class VastParser:
                 operation="element_access",
             ) from e
         except Exception as e:
+            if isinstance(e, VastElementError):
+                raise
             raise VastElementError(
                 f"Failed to convert element to dictionary: {str(e)}",
                 element_tag=element.tag,

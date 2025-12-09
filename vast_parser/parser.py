@@ -11,11 +11,12 @@ Features:
 - Backward compatible with existing code
 """
 
-from typing import Any, Dict, List, Optional, Union
-from lxml import etree
 import json
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
+
+from lxml import etree
 
 
 class MergeStrategy(Enum):
@@ -30,13 +31,13 @@ class XPathRule:
     """Configuration for a single XPath rule"""
     xpath: str
     merge: str = "replace"
-    target: Optional[str] = None
+    target: str | None = None
     extract_node: bool = False
-    fields: Optional[Dict[str, str]] = None
-    attributes: Optional[List[str]] = None
-    sort_by: Optional[str] = None
+    fields: dict[str, str] | None = None
+    attributes: list[str] | None = None
+    sort_by: str | None = None
     sort_order: str = "asc"
-    limit: Optional[int] = None
+    limit: int | None = None
     text: bool = False
 
 
@@ -44,28 +45,28 @@ class VASTParser:
     """
     Base VAST Parser - maintains backward compatibility
     """
-    
+
     NAMESPACES = {"vast": "http://www.iab.com/VAST"}
-    
-    def __init__(self, namespaces: Optional[Dict] = None):
+
+    def __init__(self, namespaces: dict | None = None):
         self.namespaces = namespaces or self.NAMESPACES
-    
-    def parse(self, xml_string: str) -> Dict[str, Any]:
+
+    def parse(self, xml_string: str) -> dict[str, Any]:
         """
         Legacy parse method - no config, simple extraction
-        
+
         Returns flat dict with all elements found
-        
+
         This is for backward compatibility with existing code
         """
         root = etree.fromstring(xml_string.encode('utf-8'))
         result = {}
-        
+
         # Legacy extraction - all impressions, all errors, all tracking
         impressions = root.xpath("//vast:Impression/text()", namespaces=self.NAMESPACES)
         errors = root.xpath("//vast:Error/text()", namespaces=self.NAMESPACES)
         tracking = root.xpath("//vast:Tracking", namespaces=self.NAMESPACES)
-        
+
         if impressions:
             result['impressions'] = impressions
         if errors:
@@ -78,59 +79,56 @@ class VASTParser:
                 }
                 for t in tracking
             ]
-        
+
         return result
-    
-    def parse_file(self, filepath: str) -> Dict[str, Any]:
+
+    def parse_file(self, filepath: str) -> dict[str, Any]:
         """Parse VAST from file"""
-        with open(filepath, 'r', encoding='utf-8') as f:
+        with open(filepath, encoding='utf-8') as f:
             return self.parse(f.read())
 
 
 class EnhancedVASTParser(VASTParser):
     """
     Enhanced VAST Parser with filtering, sorting, and configuration
-    
+
     Features:
     - Config-based parsing
     - XPath filtering
     - Sorting and limiting
     - Backward compatible
     """
-    
-    def __init__(self, config: Dict[str, Any], namespaces: Optional[Dict] = None):
+
+    def __init__(self, config: dict[str, Any], namespaces: dict | None = None):
         super().__init__(namespaces)
         self.config = config
-    
-    def parse(self, xml_string: str) -> Dict[str, Any]:
+
+    def parse(self, xml_string: str) -> dict[str, Any]:
         """Parse VAST XML with config, filtering, and sorting"""
         root = etree.fromstring(xml_string.encode('utf-8'))
         result = {}
-        
+
         for section, rules in self.config.items():
             for key, rule in rules.items():
                 self._process_rule(root, section, key, rule, result)
-        
+
         return result
-    
+
     def _process_rule(
         self,
         root: etree._Element,
         section: str,
         key: str,
-        rule: Union[Dict[str, Any], XPathRule],
-        result: Dict
+        rule: dict[str, Any] | XPathRule,
+        result: dict
     ):
         """Process a single rule with filtering, sorting, limiting"""
-        if isinstance(rule, dict):
-            rule_dict = rule
-        else:
-            rule_dict = rule.__dict__
-        
+        rule_dict = rule if isinstance(rule, dict) else rule.__dict__
+
         xpath = rule_dict.get("xpath")
         if not xpath:
             return
-        
+
         # Find elements
         try:
             elements = root.xpath(xpath, namespaces=self.namespaces)
@@ -143,7 +141,7 @@ class EnhancedVASTParser(VASTParser):
             return
         if not elements:
             return
-        
+
         # Extract values
         if rule_dict.get("extract_node") and rule_dict.get("fields"):
             values = self._extract_complex_nodes(elements, rule_dict["fields"])
@@ -154,7 +152,7 @@ class EnhancedVASTParser(VASTParser):
                 elem.text.strip() if hasattr(elem, 'text') and elem.text else str(elem)
                 for elem in elements
             ]
-        
+
         # Apply sorting
         if rule_dict.get("sort_by"):
             values = self._apply_sort(
@@ -162,17 +160,17 @@ class EnhancedVASTParser(VASTParser):
                 rule_dict["sort_by"],
                 rule_dict.get("sort_order", "asc")
             )
-        
+
         # Apply limit
         if rule_dict.get("limit"):
             values = values[:rule_dict["limit"]]
-        
+
         # Merge
         if values:
             target = rule_dict.get("target", f"{section}.{key}")
             self._merge_values(result, target, values, rule_dict.get("merge", "replace"))
-    
-    def _extract_attributes(self, elements: List, rule: Dict) -> List[Dict]:
+
+    def _extract_attributes(self, elements: list, rule: dict) -> list[dict]:
         """Extract attributes from elements"""
         result = []
         for elem in elements:
@@ -181,12 +179,12 @@ class EnhancedVASTParser(VASTParser):
                 obj["text"] = elem.text.strip() if elem.text else None
             result.append(obj)
         return result
-    
+
     def _extract_complex_nodes(
         self,
-        elements: List,
-        fields: Dict[str, str]
-    ) -> List[Dict]:
+        elements: list,
+        fields: dict[str, str]
+    ) -> list[dict]:
         """Extract complex node structures"""
         result = []
         for elem in elements:
@@ -203,75 +201,74 @@ class EnhancedVASTParser(VASTParser):
                     obj[field_name] = sub[0] if sub else None
             result.append(obj)
         return result
-    
+
     def _process_concat(self, elem: etree._Element, concat_expr: str) -> str:
         """Process concat() expressions"""
         expr = concat_expr.replace("concat(", "").replace(")", "")
         parts = [p.strip() for p in expr.split(", ")]
-        
+
         values = []
         for part in parts:
             if part.startswith("@"):
                 val = elem.get(part[1:]) or "?"
                 values.append(val)
             else:
-                values.append(part.strip("'\"")
-        
+                values.append(part.strip("'\""))
+
         return "".join(values)
-    
+
     def _apply_sort(
         self,
-        values: List[Dict],
+        values: list[dict],
         sort_key: str,
         sort_order: str = "asc"
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """Sort by field with automatic type conversion"""
         reverse = sort_order.lower() == "desc"
-        
+
         def sort_fn(item):
             val = item.get(sort_key) if isinstance(item, dict) else item
             try:
                 return float(val) if val else 0
             except (ValueError, TypeError):
                 return str(val) if val else ""
-        
+
         return sorted(values, key=sort_fn, reverse=reverse)
-    
+
     def _merge_values(
         self,
-        result: Dict,
+        result: dict,
         path: str,
-        values: List,
+        values: list,
         strategy: str
     ):
         """Merge values using dot-notation path"""
         keys = path.split(".")
         obj = result
-        
+
         for k in keys[:-1]:
             obj = obj.setdefault(k, {})
-        
+
         last_key = keys[-1]
-        
+
         if strategy == "append":
             if last_key not in obj:
                 obj[last_key] = []
             elif not isinstance(obj[last_key], list):
                 obj[last_key] = [obj[last_key]]
             obj[last_key].extend(values)
-        
+
         elif strategy == "replace":
             obj[last_key] = values[-1] if values else None
-        
+
         elif strategy == "update":
-            if values:
-                if isinstance(values[0], dict):
-                    if last_key not in obj:
-                        obj[last_key] = {}
-                    obj[last_key].update(values[0])
-                else:
-                    obj[last_key] = values[0]
-    
-    def to_json(self, result: Dict, indent: int = 2) -> str:
+            if isinstance(values[0], dict):
+                if last_key not in obj:
+                    obj[last_key] = {}
+                obj[last_key].update(values[0])
+            else:
+                obj[last_key] = values[0]
+
+    def to_json(self, result: dict, indent: int = 2) -> str:
         """Convert result to JSON"""
         return json.dumps(result, indent=indent, ensure_ascii=False)

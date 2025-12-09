@@ -1,7 +1,6 @@
 """Unit tests for VAST parser."""
 
 import pytest
-from lxml import etree
 
 from vast_client.config import VastParserConfig
 from vast_client.exceptions import VastXMLError
