@@ -494,6 +494,34 @@ if event.should_log_event("impression"):
 
 ## Configuration
 
+### HTTP client configuration
+
+The HTTP clients (main ad requests and tracking pixels) are configurable via settings to control timeouts, connection pooling, and SSL verification. Provide values in YAML or environment variables (nested keys use `__`).
+
+Example YAML (as used by middleware):
+```yaml
+http:
+    timeout: 30.0
+    max_connections: 20
+    max_keepalive_connections: 10
+    keepalive_expiry: 5.0
+    verify_ssl: true
+
+    tracking:
+        timeout: 5.0
+        max_connections: 50
+        max_keepalive_connections: 20
+        keepalive_expiry: 5.0
+        verify_ssl: true
+```
+
+Equivalent environment overrides:
+- `VAST_HTTP__TIMEOUT`, `VAST_HTTP__MAX_CONNECTIONS`, `VAST_HTTP__KEEPALIVE_EXPIRY`
+- `VAST_HTTP__VERIFY_SSL`
+- Tracking-specific: `VAST_HTTP__TRACKING__TIMEOUT`, `VAST_HTTP__TRACKING__MAX_CONNECTIONS`, `VAST_HTTP__TRACKING__VERIFY_SSL`
+
+The same pattern works for tracker settings (e.g., `VAST_HTTP__TRACKING__TIMEOUT`) and other VAST client knobs defined in `src/vast_client/config.py` / `src/config.py`.
+
 ### VastParserConfig
 
 ```python

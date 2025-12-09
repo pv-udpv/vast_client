@@ -9,6 +9,7 @@ class VastEvents(str, Enum):
     # Parser events
     PARSE_STARTED = "vast.parse.started"
     PARSE_SUCCESS = "vast.parse.success"
+    PARSE_COMPLETED = "vast.parse.completed"
     PARSE_FAILED = "vast.parse.failed"
 
     # Request events
