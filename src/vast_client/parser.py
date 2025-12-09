@@ -154,8 +154,8 @@ class VastParser:
         Returns:
             Dictionary of parsed extensions
 
-        Raises:
-            VastExtensionError: If extension parsing fails (logged as warning)
+        Note:
+            Element parsing errors are logged as warnings and do not stop parsing.
         """
         self.logger.debug("Parsing VAST extensions")
         extensions = {}
