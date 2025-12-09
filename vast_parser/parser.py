@@ -159,7 +159,8 @@ class EnhancedVASTParser(VASTParser):
         try:
             elements = root.xpath(xpath, namespaces=self.namespaces)
         except etree.XPathEvalError as e:
-            # Invalid XPath expression - skip this rule
+            # Silently skip invalid XPath expressions to allow graceful degradation
+            # This enables configs to work even if some rules have malformed XPath
             return
             
         if not elements:
