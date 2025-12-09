@@ -61,11 +61,10 @@ class VastClient:
         else:
             # Legacy initialization
             # Extract components from kwargs
-            self.client = kwargs.get("client")  # Will be initialized on first use
             self.parser = kwargs.get("parser") or VastParser()
             self.tracker = kwargs.get("tracker") or VastTracker(
                 {},
-                self.client,
+                None,  # client will be fetched on each request
                 None,  # embed_client will be set later
                 None,  # No creative_id initially
             )
@@ -158,7 +157,7 @@ class VastClient:
             self.ssl_verify = True  # default
 
         # Initialize components from config
-        self.client = kwargs.get("client")  # Will be initialized on first use
+        # Note: client is NOT cached here - it will be fetched on each request
 
         # Create parser from config
         if isinstance(config.parser, VastParser):
@@ -169,7 +168,7 @@ class VastClient:
         # Create initial tracker (will be replaced when ad is requested)
         self.tracker = VastTracker(
             {},
-            self.client,
+            None,  # client will be fetched on each request
             None,  # embed_client will be set later
             None,  # No creative_id initially
             config.tracker if isinstance(config.tracker, VastTrackerConfig) else None,
@@ -337,15 +336,14 @@ class VastClient:
                 self.logger.debug("Final request URL", url=final_url)
 
             # Make request with manually constructed URL to avoid automatic encoding
-            # Get global HTTP client if not set
-            if self.client is None:
-                # Determine SSL verification setting (priority: config > instance > default)
-                ssl_verify = self.ssl_verify
-                if hasattr(self, "config") and self.config and hasattr(self.config, "ssl_verify"):
-                    ssl_verify = self.config.ssl_verify
-                self.client = get_main_http_client(ssl_verify=ssl_verify)
+            # Get SSL verification setting (priority: config > instance > default)
+            ssl_verify = self.ssl_verify
+            if hasattr(self, "config") and self.config and hasattr(self.config, "ssl_verify"):
+                ssl_verify = self.config.ssl_verify
 
-            response = await self.client.get(final_url, headers=final_headers)
+            # Always get fresh HTTP client from manager (avoids closed client issues)
+            http_client = get_main_http_client(ssl_verify=ssl_verify)
+            response = await http_client.get(final_url, headers=final_headers)
 
             if response.status_code == 204:
                 success = True  # 204 - valid response (no ad)
