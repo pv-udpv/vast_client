@@ -19,6 +19,7 @@ class VastEvents(str, Enum):
 
     # Tracking events
     TRACKING_EVENT_SENT = "vast.tracking.sent"
+    TRACKING_SUCCESS = "vast.tracking.success"
     TRACKING_FAILED = "vast.tracking.failed"
 
     # Player events
