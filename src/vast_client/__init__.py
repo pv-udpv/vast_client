@@ -94,6 +94,13 @@ from .exceptions import (
     VastHTTPTimeoutError,
     VastHTTPSSLError,
 )
+from .metrics import (
+    MetricsCollector,
+    NoOpMetrics,
+    PrometheusMetrics,
+    VastMetrics,
+    MetricLabels,
+)
 
 __version__ = "1.0.0"
 __author__ = "CTV Middleware Team"
@@ -155,6 +162,12 @@ __all__ = [
     "VastHTTPError",
     "VastHTTPTimeoutError",
     "VastHTTPSSLError",
+    # Metrics (NEW)
+    "MetricsCollector",
+    "NoOpMetrics",
+    "PrometheusMetrics",
+    "VastMetrics",
+    "MetricLabels",
     # Package metadata
     "__version__",
     "__author__",
