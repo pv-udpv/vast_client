@@ -18,6 +18,7 @@ from .config import VastClientConfig, VastTrackerConfig
 from .parser import VastParser
 from .player import VastPlayer
 from .tracker import VastTracker
+from .multi_source import VastMultiSourceOrchestrator, VastFetchConfig, FetchStrategy
 
 
 if TYPE_CHECKING:
@@ -70,6 +71,12 @@ class VastClient:
             )
             # Parse configuration
             self._parse_config(config_or_url, kwargs.get("embed_client"))
+
+        # Initialize multi-source orchestrator
+        self._orchestrator = VastMultiSourceOrchestrator(
+            parser=self.parser,
+            ssl_verify=self.ssl_verify,
+        )
 
     def _parse_config(self, config_or_url, embed_client: "EmbedHttpClient | None" = None):
         """Parse configuration from various sources."""
@@ -272,6 +279,100 @@ class VastClient:
         # DON'T extract 'client' as httpx.AsyncClient if it's dict with configuration
 
         return cls(config, ctx, **kwargs)
+
+    @property
+    def multi_source(self) -> VastMultiSourceOrchestrator:
+        """
+        Access the multi-source orchestrator.
+
+        Provides direct access to multi-source VAST capabilities for
+        advanced use cases requiring parallel fetching, fallback support,
+        or custom filtering.
+
+        Returns:
+            VastMultiSourceOrchestrator: The orchestrator instance
+
+        Examples:
+            Direct orchestrator access:
+            >>> result = await client.multi_source.execute_pipeline(
+            ...     VastFetchConfig(
+            ...         sources=["https://ads1.com/vast", "https://ads2.com/vast"],
+            ...         fallbacks=["https://fallback.com/vast"]
+            ...     )
+            ... )
+        """
+        return self._orchestrator
+
+    async def request_ad_with_fallback(
+        self,
+        primary: str,
+        fallbacks: list[str],
+        params: dict[str, Any] | None = None,
+        headers: dict[str, Any] | None = None,
+        auto_track: bool = True,
+    ) -> dict[str, Any]:
+        """
+        Request ad with fallback sources.
+
+        Convenience method for requesting ads with automatic fallback to
+        alternative sources if the primary source fails.
+
+        Args:
+            primary: Primary VAST source URL
+            fallbacks: List of fallback URLs to try if primary fails
+            params: Additional query parameters
+            headers: Additional headers
+            auto_track: Whether to automatically track impression events
+
+        Returns:
+            dict: Parsed VAST data from successful source
+
+        Raises:
+            Exception: If all sources (primary + fallbacks) fail
+
+        Examples:
+            Request with fallback:
+            >>> ad_data = await client.request_ad_with_fallback(
+            ...     primary="https://ads1.example.com/vast",
+            ...     fallbacks=["https://ads2.example.com/vast", "https://ads3.example.com/vast"]
+            ... )
+        """
+        config = VastFetchConfig(
+            sources=[primary],
+            fallbacks=fallbacks,
+            params=params or {},
+            headers=headers or {},
+            auto_track=auto_track,
+        )
+
+        result = await self._orchestrator.execute_pipeline(config)
+
+        if not result.success:
+            error_msg = f"All sources failed: {result.errors}"
+            raise Exception(error_msg)
+
+        if result.parsed_data is None:
+            raise Exception("Failed to parse VAST response")
+
+        # Update internal tracker with tracking events
+        if result.parsed_data:
+            tracking_events = result.parsed_data.get("tracking_events", {})
+            tracking_events.update({"impression": result.parsed_data.get("impression", [])})
+            tracking_events.update({"error": result.parsed_data.get("error", [])})
+
+            if tracking_events:
+                creative_data = result.parsed_data.get("creative", {})
+                creative_id = creative_data.get("id") or creative_data.get("ad_id")
+
+                tracking_client = get_tracking_http_client()
+                self.tracker = VastTracker(
+                    tracking_events,
+                    tracking_client,
+                    self.embed_client,
+                    creative_id,
+                )
+
+        return result.parsed_data
 
     async def request_ad(
         self,

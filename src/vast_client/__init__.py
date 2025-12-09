@@ -94,6 +94,17 @@ from .exceptions import (
     VastHTTPTimeoutError,
     VastHTTPSSLError,
 )
+from .multi_source import (
+    VastMultiSourceOrchestrator,
+    VastMultiSourceFetcher,
+    MultiSourceTracker,
+    VastFetchConfig,
+    FetchStrategy,
+    FetchMode,
+    FetchResult,
+    VastParseFilter,
+    MediaType,
+)
 
 __version__ = "1.0.0"
 __author__ = "CTV Middleware Team"
@@ -155,6 +166,16 @@ __all__ = [
     "VastHTTPError",
     "VastHTTPTimeoutError",
     "VastHTTPSSLError",
+    # Multi-source components
+    "VastMultiSourceOrchestrator",
+    "VastMultiSourceFetcher",
+    "MultiSourceTracker",
+    "VastFetchConfig",
+    "FetchStrategy",
+    "FetchMode",
+    "FetchResult",
+    "VastParseFilter",
+    "MediaType",
     # Package metadata
     "__version__",
     "__author__",
