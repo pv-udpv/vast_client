@@ -4,7 +4,6 @@ Comprehensive tests including backward compatibility
 """
 
 import pytest
-import json
 from vast_parser import VASTParser, EnhancedVASTParser
 
 
