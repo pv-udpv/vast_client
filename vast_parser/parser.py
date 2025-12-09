@@ -16,17 +16,14 @@ from lxml import etree
 import json
 from dataclasses import dataclass
 from enum import Enum
-import sys
-import os
 
-# Add src directory to path to import from vast_client
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
-
+# Optional logging integration with vast_client
 try:
+    # Try to import from installed vast_client package
     from vast_client.log_config import get_context_logger
-    from vast_client.events import VastEvents
     LOGGING_AVAILABLE = True
 except ImportError:
+    # Fallback if vast_client is not available
     LOGGING_AVAILABLE = False
 
 
