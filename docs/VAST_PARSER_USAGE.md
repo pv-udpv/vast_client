@@ -19,11 +19,20 @@ for impression in result['impressions']:
 
 ```python
 from vast_parser import EnhancedVASTParser
-import yaml
 
-# Load configuration
-with open('configs/vast_config_adaptive_streaming.yaml') as f:
-    config = yaml.safe_load(f)
+# Example configuration (as Python dict)
+config = {
+    "adaptive": {
+        "hd": {
+            "xpath": "//vast:MediaFile[@width >= '1280']",
+            # ... other config options ...
+        },
+        "mobile": {
+            "xpath": "//vast:MediaFile[@width <= '640']",
+            # ... other config options ...
+        }
+    }
+}
 
 # Parse with filtering and sorting
 parser = EnhancedVASTParser(config)
