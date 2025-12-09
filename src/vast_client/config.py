@@ -15,13 +15,15 @@ from .context import TrackingContext
 
 class PlaybackMode(str, Enum):
     """Playback mode enumeration."""
-    REAL = "real"          # Real-time playback (wall-clock)
+
+    REAL = "real"  # Real-time playback (wall-clock)
     HEADLESS = "headless"  # Simulated playback (virtual time)
-    AUTO = "auto"          # Auto-detect from settings
+    AUTO = "auto"  # Auto-detect from settings
 
 
 class InterruptionType(str, Enum):
     """Playback interruption reason enumeration."""
+
     NONE = "none"
     PAUSE = "pause"
     STOP = "stop"
@@ -61,11 +63,11 @@ class VastParserConfig:
 class PlaybackSessionConfig:
     """
     Configuration for VAST ad playback sessions.
-    
+
     Controls playback behavior, including mode selection (real vs. simulated),
     interruption handling, and session persistence. Supports provider-specific
     and publisher-specific overrides through hierarchical configuration.
-    
+
     Attributes:
         mode: Playback mode - 'real' (wall-clock), 'headless' (simulated), or 'auto' (auto-detect)
         interruption_rules: Provider-specific interruption probabilities and timing rules
@@ -76,11 +78,11 @@ class PlaybackSessionConfig:
         enable_session_persistence: Store playback sessions for recovery (feature-gated)
         emit_playback_events: Emit structured playback event logs
         log_tracking_urls: Log tracking URLs before sending
-        
+
     Examples:
         Basic real-time playback:
         >>> config = PlaybackSessionConfig(mode=PlaybackMode.REAL)
-        
+
         Headless with custom interruption rules:
         >>> config = PlaybackSessionConfig(
         ...     mode=PlaybackMode.HEADLESS,
@@ -89,7 +91,7 @@ class PlaybackSessionConfig:
         ...         'midpoint': {'probability': 0.05, 'min_offset_sec': -5, 'max_offset_sec': 5}
         ...     }
         ... )
-        
+
         Production configuration with session persistence:
         >>> config = PlaybackSessionConfig(
         ...     mode=PlaybackMode.AUTO,
@@ -98,33 +100,35 @@ class PlaybackSessionConfig:
         ...     enable_auto_quartiles=True
         ... )
     """
-    
+
     # Playback mode selection
     mode: PlaybackMode = PlaybackMode.REAL
-    
+
     # Interruption rules (provider-specific)
     # Structure: {event_type: {'probability': float, 'min_offset_sec': int, 'max_offset_sec': int}}
-    interruption_rules: dict[str, dict[str, Any]] = field(default_factory=lambda: {
-        'start': {'probability': 0.0, 'min_offset_sec': 0, 'max_offset_sec': 2},
-        'firstQuartile': {'probability': 0.0, 'min_offset_sec': -2, 'max_offset_sec': 2},
-        'midpoint': {'probability': 0.0, 'min_offset_sec': -2, 'max_offset_sec': 2},
-        'thirdQuartile': {'probability': 0.0, 'min_offset_sec': -2, 'max_offset_sec': 2},
-        'complete': {'probability': 0.0, 'min_offset_sec': -5, 'max_offset_sec': 0},
-    })
-    
+    interruption_rules: dict[str, dict[str, Any]] = field(
+        default_factory=lambda: {
+            "start": {"probability": 0.0, "min_offset_sec": 0, "max_offset_sec": 2},
+            "firstQuartile": {"probability": 0.0, "min_offset_sec": -2, "max_offset_sec": 2},
+            "midpoint": {"probability": 0.0, "min_offset_sec": -2, "max_offset_sec": 2},
+            "thirdQuartile": {"probability": 0.0, "min_offset_sec": -2, "max_offset_sec": 2},
+            "complete": {"probability": 0.0, "min_offset_sec": -5, "max_offset_sec": 0},
+        }
+    )
+
     # Session duration limits
     max_session_duration_sec: int = 0  # 0 = unlimited
-    
+
     # Quartile tracking options
     enable_auto_quartiles: bool = True
     quartile_offset_tolerance_sec: float = 1.0
-    
+
     # Headless playback options
     headless_tick_interval_sec: float = 0.1  # Simulation granularity
-    
+
     # Session persistence
     enable_session_persistence: bool = False
-    
+
     # Logging and observability
     emit_playback_events: bool = True
     log_tracking_urls: bool = False
@@ -134,10 +138,10 @@ class PlaybackSessionConfig:
 class VastTrackerConfig:
     """
     Configuration for VAST tracking with context injection support.
-    
+
     This class provides comprehensive configuration for VAST tracking operations,
     including context injection parameters for different deployment environments.
-    
+
     Examples:
         Development Configuration:
         >>> dev_config = VastTrackerConfig(
@@ -145,7 +149,7 @@ class VastTrackerConfig:
         ...     context_max_retries=5,     # More retries for unstable networks
         ...     context_retry_delay=2.0,   # Longer delays between retries
         ...     default_capabilities=[
-        ...         'macros', 'state', 'logging_contextual', 
+        ...         'macros', 'state', 'logging_contextual',
         ...         'http_send_contextual', 'metrics_contextual'
         ...     ]
         ... )
@@ -154,7 +158,7 @@ class VastTrackerConfig:
         ...     http_client=httpx.AsyncClient(timeout=30.0),
         ...     metrics=development_metrics_client
         ... )
-        
+
         Production Configuration:
         >>> prod_config = VastTrackerConfig(
         ...     context_timeout=5.0,       # Fast timeouts for production
@@ -172,7 +176,7 @@ class VastTrackerConfig:
         ...     ),
         ...     metrics=production_metrics_client
         ... )
-        
+
         Testing Configuration:
         >>> test_config = VastTrackerConfig(
         ...     context_timeout=1.0,       # Fast tests
@@ -194,12 +198,14 @@ class VastTrackerConfig:
     static_macros: dict[str, str] = field(default_factory=dict)
 
     # Mapping from EmbedHttpClient params to VAST macros
-    macro_mapping: dict[str, str] = field(default_factory=lambda: {
-        "ab_uid": "DEVICE_SERIAL",
-        "ad_place": "PLACEMENT_TYPE",
-        "media_title": "CHANNEL_NAME",
-        "media_tag": "CHANNEL_CATEGORY",
-    })
+    macro_mapping: dict[str, str] = field(
+        default_factory=lambda: {
+            "ab_uid": "DEVICE_SERIAL",
+            "ad_place": "PLACEMENT_TYPE",
+            "media_title": "CHANNEL_NAME",
+            "media_tag": "CHANNEL_CATEGORY",
+        }
+    )
 
     # Tracking options
     timeout: float = 5.0
@@ -209,16 +215,16 @@ class VastTrackerConfig:
     # Context injection configuration
     context_timeout: float = 5.0
     """Timeout for HTTP requests in context injection (seconds)."""
-    
+
     context_max_retries: int = 3
     """Maximum number of retries for failed operations."""
-    
+
     context_retry_delay: float = 1.0
     """Base delay between retries (seconds). Uses exponential backoff."""
-    
-    default_capabilities: list[str] = field(default_factory=lambda: [
-        'macros', 'state', 'logging_contextual', 'http_send_contextual'
-    ])
+
+    default_capabilities: list[str] = field(
+        default_factory=lambda: ["macros", "state", "logging_contextual", "http_send_contextual"]
+    )
     """
     Default capabilities to apply to trackables.
     
@@ -235,27 +241,24 @@ class VastTrackerConfig:
     publisher_overrides: dict[str, Any] = field(default_factory=dict)
 
     def build_context(
-        self, 
-        logger: Any = None,
-        http_client: Any = None,
-        metrics: Any = None
+        self, logger: Any = None, http_client: Any = None, metrics: Any = None
     ) -> TrackingContext:
         """
         Build TrackingContext from configuration values.
-        
+
         Args:
             logger: Structured logger instance (e.g., structlog.BoundLogger)
             http_client: HTTP client instance (e.g., httpx.AsyncClient)
             metrics: Metrics client instance
-            
+
         Returns:
             TrackingContext: Configured context instance
-            
+
         Examples:
             Basic context creation:
             >>> config = VastTrackerConfig()
             >>> context = config.build_context()
-            
+
             Development context with all dependencies:
             >>> dev_config = VastTrackerConfig(
             ...     context_timeout=30.0,
@@ -266,7 +269,7 @@ class VastTrackerConfig:
             ...     http_client=httpx.AsyncClient(timeout=30.0),
             ...     metrics=dev_metrics
             ... )
-            
+
             Production context with optimized settings:
             >>> prod_config = VastTrackerConfig(
             ...     context_timeout=5.0,
@@ -285,16 +288,16 @@ class VastTrackerConfig:
             metrics_client=metrics,
             timeout=self.context_timeout,
             max_retries=self.context_max_retries,
-            retry_delay=self.context_retry_delay
+            retry_delay=self.context_retry_delay,
         )
 
     def get_capability_decorators(self) -> list[Callable]:
         """
         Get list of decorator functions based on default_capabilities.
-        
+
         Returns:
             List of decorator functions to apply to trackables
-            
+
         Examples:
             >>> config = VastTrackerConfig(default_capabilities=['macros', 'logging_contextual'])
             >>> decorators = config.get_capability_decorators()
@@ -303,24 +306,24 @@ class VastTrackerConfig:
             ...     MyTrackable = decorator(MyTrackable)
         """
         from .capabilities import (
-            with_macros, with_state, with_logging_contextual,
-            with_http_send_contextual, with_metrics_contextual,
-            with_retry_logic_contextual
+            with_macros,
+            with_state,
+            with_logging_contextual,
+            with_http_send_contextual,
+            with_metrics_contextual,
+            with_retry_logic_contextual,
         )
-        
+
         capability_map = {
-            'macros': with_macros,
-            'state': with_state,
-            'logging_contextual': with_logging_contextual,
-            'http_send_contextual': with_http_send_contextual,
-            'metrics_contextual': with_metrics_contextual,
-            'retry_logic_contextual': with_retry_logic_contextual,
+            "macros": with_macros,
+            "state": with_state,
+            "logging_contextual": with_logging_contextual,
+            "http_send_contextual": with_http_send_contextual,
+            "metrics_contextual": with_metrics_contextual,
+            "retry_logic_contextual": with_retry_logic_contextual,
         }
-        
-        return [
-            capability_map[cap] for cap in self.default_capabilities 
-            if cap in capability_map
-        ]
+
+        return [capability_map[cap] for cap in self.default_capabilities if cap in capability_map]
 
 
 @dataclass
@@ -340,6 +343,9 @@ class VastClientConfig:
     enable_tracking: bool = True
     enable_parsing: bool = True
 
+    # SSL/TLS verification
+    ssl_verify: bool | str = True  # True (verify), False (disable), or path to CA bundle
+
     # Provider-specific settings
     provider_settings: dict[str, Any] = field(default_factory=dict)
 
@@ -347,7 +353,7 @@ class VastClientConfig:
 def get_default_vast_config(provider: str = "generic") -> VastClientConfig:
     """
     Get default VAST configuration for a provider.
-    
+
     Includes provider-specific tracking macros, parser settings, and
     playback interruption rules for headless mode simulation.
     """
@@ -355,118 +361,155 @@ def get_default_vast_config(provider: str = "generic") -> VastClientConfig:
 
     if provider == "global":
         # AdStream Global specific config
-        config.tracker.macro_mapping.update({
-            "city": "CITY",
-            "city_code": "CITY_CODE",
-        })
-        config.parser.custom_xpaths.update({
-            "city_info": ".//Extensions/Extension[@type='city']/Name",
-        })
-        config.tracker.static_macros.update({
-            "AD_SERVER": "AdStream Global",
-        })
+        config.tracker.macro_mapping.update(
+            {
+                "city": "CITY",
+                "city_code": "CITY_CODE",
+            }
+        )
+        config.parser.custom_xpaths.update(
+            {
+                "city_info": ".//Extensions/Extension[@type='city']/Name",
+            }
+        )
+        config.tracker.static_macros.update(
+            {
+                "AD_SERVER": "AdStream Global",
+            }
+        )
         # Global provider has higher interruption probability
-        config.playback.interruption_rules.update({
-            'start': {'probability': 0.15, 'min_offset_sec': 0, 'max_offset_sec': 3},
-            'firstQuartile': {'probability': 0.05, 'min_offset_sec': -2, 'max_offset_sec': 2},
-            'midpoint': {'probability': 0.08, 'min_offset_sec': -3, 'max_offset_sec': 3},
-            'thirdQuartile': {'probability': 0.05, 'min_offset_sec': -2, 'max_offset_sec': 2},
-            'complete': {'probability': 0.02, 'min_offset_sec': -5, 'max_offset_sec': 0},
-        })
+        config.playback.interruption_rules.update(
+            {
+                "start": {"probability": 0.15, "min_offset_sec": 0, "max_offset_sec": 3},
+                "firstQuartile": {"probability": 0.05, "min_offset_sec": -2, "max_offset_sec": 2},
+                "midpoint": {"probability": 0.08, "min_offset_sec": -3, "max_offset_sec": 3},
+                "thirdQuartile": {"probability": 0.05, "min_offset_sec": -2, "max_offset_sec": 2},
+                "complete": {"probability": 0.02, "min_offset_sec": -5, "max_offset_sec": 0},
+            }
+        )
 
     elif provider == "tiger":
         # AdStream Tiger specific config
-        config.tracker.macro_mapping.update({
-            "city_name": "CITY",
-            "city_code": "CITY_CODE",
-        })
-        config.tracker.static_macros.update({
-            "AD_SERVER": "AdStream Tiger",
-        })
+        config.tracker.macro_mapping.update(
+            {
+                "city_name": "CITY",
+                "city_code": "CITY_CODE",
+            }
+        )
+        config.tracker.static_macros.update(
+            {
+                "AD_SERVER": "AdStream Tiger",
+            }
+        )
         # Tiger has moderate interruption probability
-        config.playback.interruption_rules.update({
-            'start': {'probability': 0.08, 'min_offset_sec': 0, 'max_offset_sec': 2},
-            'firstQuartile': {'probability': 0.03, 'min_offset_sec': -1, 'max_offset_sec': 1},
-            'midpoint': {'probability': 0.05, 'min_offset_sec': -2, 'max_offset_sec': 2},
-            'thirdQuartile': {'probability': 0.03, 'min_offset_sec': -1, 'max_offset_sec': 1},
-            'complete': {'probability': 0.01, 'min_offset_sec': -5, 'max_offset_sec': 0},
-        })
+        config.playback.interruption_rules.update(
+            {
+                "start": {"probability": 0.08, "min_offset_sec": 0, "max_offset_sec": 2},
+                "firstQuartile": {"probability": 0.03, "min_offset_sec": -1, "max_offset_sec": 1},
+                "midpoint": {"probability": 0.05, "min_offset_sec": -2, "max_offset_sec": 2},
+                "thirdQuartile": {"probability": 0.03, "min_offset_sec": -1, "max_offset_sec": 1},
+                "complete": {"probability": 0.01, "min_offset_sec": -5, "max_offset_sec": 0},
+            }
+        )
 
     elif provider == "leto":
         # Leto specific config
         config.tracker.macro_formats = ["%%{macro}%%", "[{macro}]"]  # Different format priority
-        config.tracker.macro_mapping.update({
-            "wl": "WL",
-            "pad_id": "PAD_ID",
-            "block_id": "BLOCK_ID",
-        })
-        config.tracker.static_macros.update({
-            "AD_SERVER": "Leto",
-        })
+        config.tracker.macro_mapping.update(
+            {
+                "wl": "WL",
+                "pad_id": "PAD_ID",
+                "block_id": "BLOCK_ID",
+            }
+        )
+        config.tracker.static_macros.update(
+            {
+                "AD_SERVER": "Leto",
+            }
+        )
         # Leto has low interruption probability
-        config.playback.interruption_rules.update({
-            'start': {'probability': 0.05, 'min_offset_sec': 0, 'max_offset_sec': 2},
-            'firstQuartile': {'probability': 0.02, 'min_offset_sec': -1, 'max_offset_sec': 1},
-            'midpoint': {'probability': 0.03, 'min_offset_sec': -1, 'max_offset_sec': 1},
-            'thirdQuartile': {'probability': 0.02, 'min_offset_sec': -1, 'max_offset_sec': 1},
-            'complete': {'probability': 0.01, 'min_offset_sec': -5, 'max_offset_sec': 0},
-        })
+        config.playback.interruption_rules.update(
+            {
+                "start": {"probability": 0.05, "min_offset_sec": 0, "max_offset_sec": 2},
+                "firstQuartile": {"probability": 0.02, "min_offset_sec": -1, "max_offset_sec": 1},
+                "midpoint": {"probability": 0.03, "min_offset_sec": -1, "max_offset_sec": 1},
+                "thirdQuartile": {"probability": 0.02, "min_offset_sec": -1, "max_offset_sec": 1},
+                "complete": {"probability": 0.01, "min_offset_sec": -5, "max_offset_sec": 0},
+            }
+        )
 
     elif provider == "yandex":
         # Yandex Direct specific config
         config.tracker.macro_formats = ["{macro}", "[{macro}]"]
-        config.tracker.macro_mapping.update({
-            "yandex_uid": "YANDEX_UID",
-            "campaign_id": "CAMPAIGN_ID",
-            "banner_id": "BANNER_ID",
-        })
-        config.tracker.static_macros.update({
-            "AD_SERVER": "Yandex Direct",
-        })
+        config.tracker.macro_mapping.update(
+            {
+                "yandex_uid": "YANDEX_UID",
+                "campaign_id": "CAMPAIGN_ID",
+                "banner_id": "BANNER_ID",
+            }
+        )
+        config.tracker.static_macros.update(
+            {
+                "AD_SERVER": "Yandex Direct",
+            }
+        )
         # Yandex has moderate interruption probability
-        config.playback.interruption_rules.update({
-            'start': {'probability': 0.10, 'min_offset_sec': 0, 'max_offset_sec': 2},
-            'firstQuartile': {'probability': 0.04, 'min_offset_sec': -1, 'max_offset_sec': 1},
-            'midpoint': {'probability': 0.06, 'min_offset_sec': -2, 'max_offset_sec': 2},
-            'thirdQuartile': {'probability': 0.04, 'min_offset_sec': -1, 'max_offset_sec': 1},
-            'complete': {'probability': 0.02, 'min_offset_sec': -5, 'max_offset_sec': 0},
-        })
+        config.playback.interruption_rules.update(
+            {
+                "start": {"probability": 0.10, "min_offset_sec": 0, "max_offset_sec": 2},
+                "firstQuartile": {"probability": 0.04, "min_offset_sec": -1, "max_offset_sec": 1},
+                "midpoint": {"probability": 0.06, "min_offset_sec": -2, "max_offset_sec": 2},
+                "thirdQuartile": {"probability": 0.04, "min_offset_sec": -1, "max_offset_sec": 1},
+                "complete": {"probability": 0.02, "min_offset_sec": -5, "max_offset_sec": 0},
+            }
+        )
 
     elif provider == "google":
         # Google AdSense/AdExchange specific config
         config.tracker.macro_formats = ["%%{macro}%%", "[{macro}]"]
-        config.tracker.macro_mapping.update({
-            "google_gid": "GOOGLE_GID",
-            "google_cust_params": "GOOGLE_CUST_PARAMS",
-        })
-        config.tracker.static_macros.update({
-            "AD_SERVER": "Google AdSense",
-        })
+        config.tracker.macro_mapping.update(
+            {
+                "google_gid": "GOOGLE_GID",
+                "google_cust_params": "GOOGLE_CUST_PARAMS",
+            }
+        )
+        config.tracker.static_macros.update(
+            {
+                "AD_SERVER": "Google AdSense",
+            }
+        )
         # Google has high interruption probability
-        config.playback.interruption_rules.update({
-            'start': {'probability': 0.20, 'min_offset_sec': 0, 'max_offset_sec': 3},
-            'firstQuartile': {'probability': 0.08, 'min_offset_sec': -2, 'max_offset_sec': 2},
-            'midpoint': {'probability': 0.12, 'min_offset_sec': -3, 'max_offset_sec': 3},
-            'thirdQuartile': {'probability': 0.08, 'min_offset_sec': -2, 'max_offset_sec': 2},
-            'complete': {'probability': 0.03, 'min_offset_sec': -5, 'max_offset_sec': 0},
-        })
+        config.playback.interruption_rules.update(
+            {
+                "start": {"probability": 0.20, "min_offset_sec": 0, "max_offset_sec": 3},
+                "firstQuartile": {"probability": 0.08, "min_offset_sec": -2, "max_offset_sec": 2},
+                "midpoint": {"probability": 0.12, "min_offset_sec": -3, "max_offset_sec": 3},
+                "thirdQuartile": {"probability": 0.08, "min_offset_sec": -2, "max_offset_sec": 2},
+                "complete": {"probability": 0.03, "min_offset_sec": -5, "max_offset_sec": 0},
+            }
+        )
 
     elif provider == "custom":
         # Generic custom provider config
         config.tracker.macro_formats = ["[{macro}]", "${{{macro}}}", "{{{macro}}}"]
-        config.tracker.static_macros.update({
-            "AD_SERVER": "Custom Provider",
-        })
+        config.tracker.static_macros.update(
+            {
+                "AD_SERVER": "Custom Provider",
+            }
+        )
         # Custom has moderate-low interruption probability
-        config.playback.interruption_rules.update({
-            'start': {'probability': 0.07, 'min_offset_sec': 0, 'max_offset_sec': 2},
-            'firstQuartile': {'probability': 0.03, 'min_offset_sec': -1, 'max_offset_sec': 1},
-            'midpoint': {'probability': 0.04, 'min_offset_sec': -1, 'max_offset_sec': 1},
-            'thirdQuartile': {'probability': 0.03, 'min_offset_sec': -1, 'max_offset_sec': 1},
-            'complete': {'probability': 0.01, 'min_offset_sec': -5, 'max_offset_sec': 0},
-        })
+        config.playback.interruption_rules.update(
+            {
+                "start": {"probability": 0.07, "min_offset_sec": 0, "max_offset_sec": 2},
+                "firstQuartile": {"probability": 0.03, "min_offset_sec": -1, "max_offset_sec": 1},
+                "midpoint": {"probability": 0.04, "min_offset_sec": -1, "max_offset_sec": 1},
+                "thirdQuartile": {"probability": 0.03, "min_offset_sec": -1, "max_offset_sec": 1},
+                "complete": {"probability": 0.01, "min_offset_sec": -5, "max_offset_sec": 0},
+            }
+        )
 
     return config
+
 
 def get_vast_config_with_publisher_overrides(
     provider: str = "generic",
@@ -499,15 +542,19 @@ def get_vast_config_with_publisher_overrides(
 
     return config
 
+
 def create_provider_config_factory(provider: str) -> Callable[..., VastClientConfig]:
     """Create a factory function for a specific provider configuration."""
+
     def factory(publisher: str | None = None, **overrides) -> VastClientConfig:
         return get_vast_config_with_publisher_overrides(
             provider=provider,
             publisher=publisher,
             publisher_overrides=overrides,
         )
+
     return factory
+
 
 # Provider-specific factory functions
 global_config = create_provider_config_factory("global")

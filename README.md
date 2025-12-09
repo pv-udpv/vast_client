@@ -554,6 +554,40 @@ config = VastTrackerConfig(
 tracker = VastTracker(tracking_events={...}, config=config)
 ```
 
+### VastClientConfig with SSL/TLS Verification
+
+Configure SSL certificate verification for VAST requests:
+
+```python
+from vast_client.config import VastClientConfig
+from vast_client.client import VastClient
+
+# Enable SSL verification (default - production recommended)
+config = VastClientConfig(ssl_verify=True)
+client = VastClient(config)
+
+# Disable SSL verification (development only)
+config = VastClientConfig(ssl_verify=False)
+client = VastClient(config)
+
+# Use custom CA bundle
+config = VastClientConfig(ssl_verify="/path/to/ca-bundle.crt")
+client = VastClient(config)
+
+# Pass ssl_verify directly to VastClient
+client = VastClient("https://ads.example.com/vast", ssl_verify=False)
+```
+
+**SSL Verification Options:**
+
+| Value | Use Case | Security |
+|-------|----------|----------|
+| `True` (default) | Production with standard CAs | ✅ Recommended |
+| `False` | Development/testing only | ⚠️ Use with caution |
+| `"/path/to/ca.crt"` | Custom internal CAs | ✅ Recommended |
+
+For detailed SSL configuration guide, see [SSL_VERIFICATION_GUIDE.md](SSL_VERIFICATION_GUIDE.md).
+
 ## Logging and Monitoring
 
 The package integrates with the centralized logging system.

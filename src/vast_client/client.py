@@ -44,10 +44,13 @@ class VastClient:
         Args:
             config_or_url: URL string, configuration dictionary, or VastClientConfig
             ctx: Request context (ad_request)
-            **kwargs: Additional parameters (client, parser, tracker, etc.)
+            **kwargs: Additional parameters (client, parser, tracker, ssl_verify, etc.)
         """
         # Ad request context (priority: ctx, then ad_request from kwargs)
         self.ad_request = ctx or kwargs.get("ad_request", {})
+
+        # SSL verification setting
+        self.ssl_verify = kwargs.get("ssl_verify", True)
 
         # Initialize contextual logger - automatically picks up context variables
         self.logger = get_context_logger("vast_client")
@@ -146,6 +149,14 @@ class VastClient:
         """Initialize from VastClientConfig."""
         self.config = config
 
+        # Store ssl_verify from config (can be overridden by kwargs)
+        if "ssl_verify" in kwargs:
+            self.ssl_verify = kwargs["ssl_verify"]
+        elif hasattr(config, "ssl_verify"):
+            self.ssl_verify = config.ssl_verify
+        else:
+            self.ssl_verify = True  # default
+
         # Initialize components from config
         self.client = kwargs.get("client")  # Will be initialized on first use
 
@@ -177,6 +188,7 @@ class VastClient:
             publisher=config.publisher,
             enable_tracking=config.enable_tracking,
             enable_parsing=config.enable_parsing,
+            ssl_verify=self.ssl_verify,
         )
 
     @classmethod
@@ -320,16 +332,18 @@ class VastClient:
                     encoding_config=self.encoding_config,
                 )
 
-                final_url = build_url_preserving_unicode(
-                    self.upstream_url, final_params, self.encoding_config
-                )
+                final_url = build_url_preserving_unicode(self.upstream_url, final_params)
 
                 self.logger.debug("Final request URL", url=final_url)
 
             # Make request with manually constructed URL to avoid automatic encoding
             # Get global HTTP client if not set
             if self.client is None:
-                self.client = await get_main_http_client()
+                # Determine SSL verification setting (priority: config > instance > default)
+                ssl_verify = self.ssl_verify
+                if hasattr(self, "config") and self.config and hasattr(self.config, "ssl_verify"):
+                    ssl_verify = self.config.ssl_verify
+                self.client = get_main_http_client(ssl_verify=ssl_verify)
 
             response = await self.client.get(final_url, headers=final_headers)
 
@@ -389,7 +403,7 @@ class VastClient:
                             creative_id=creative_id,
                         )
                         # Use separate client for tracking
-                        tracking_client = await get_tracking_http_client()
+                        tracking_client = get_tracking_http_client()
                         self.tracker = VastTracker(
                             tracking_events,
                             tracking_client,
@@ -422,22 +436,6 @@ class VastClient:
         except Exception as e:
             error_type = "exception"
             self.logger.exception("Unexpected error in ad request", error=str(e))
-
-            # Log exception to separate file with full context
-            manager = get_http_client_manager()
-            manager.record_exception(
-                e,
-                "main",
-                context="VAST ad request",
-                extra_data={
-                    "upstream_url": self.upstream_url,
-                    "response_time": time.time() - start_time,
-                    "has_embed_client": self.embed_client is not None,
-                    "ad_request_id": (
-                        self.ad_request.get("x_request_id") if self.ad_request else None
-                    ),
-                },
-            )
             raise
         finally:
             # Record request metric

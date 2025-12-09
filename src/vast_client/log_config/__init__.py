@@ -5,6 +5,7 @@ from .main import (
     AdRequestContext,
     update_playback_progress,
     set_playback_context,
+    clear_playback_context,
 )
 
 __all__ = [
@@ -12,4 +13,5 @@ __all__ = [
     "AdRequestContext",
     "update_playback_progress",
     "set_playback_context",
+    "clear_playback_context",
 ]
