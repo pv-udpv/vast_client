@@ -11,7 +11,6 @@ from vast_client.multi_source import (
 )
 
 
-@pytest.mark.asyncio
 class TestVastClientMultiSourceIntegration:
     """Test VastClient integration with multi-source orchestrator."""
 
@@ -29,6 +28,7 @@ class TestVastClientMultiSourceIntegration:
         orchestrator = client.multi_source
         assert isinstance(orchestrator, VastMultiSourceOrchestrator)
 
+    @pytest.mark.asyncio
     @patch("vast_client.client.get_main_http_client")
     async def test_request_ad_backward_compatibility(
         self, mock_get_client, mock_vast_response
@@ -51,6 +51,7 @@ class TestVastClientMultiSourceIntegration:
         assert isinstance(result, dict)
         assert result["ad_system"] == "Test Ad System"
 
+    @pytest.mark.asyncio
     @patch("vast_client.multi_source.orchestrator.get_main_http_client")
     async def test_request_ad_with_fallback_success(
         self, mock_get_client, mock_vast_response
@@ -76,6 +77,7 @@ class TestVastClientMultiSourceIntegration:
         assert isinstance(result, dict)
         assert result["ad_system"] == "Test Ad System"
 
+    @pytest.mark.asyncio
     @patch("vast_client.multi_source.orchestrator.get_main_http_client")
     async def test_request_ad_with_fallback_all_fail(self, mock_get_client):
         """Test request_ad_with_fallback when all sources fail."""
@@ -95,6 +97,7 @@ class TestVastClientMultiSourceIntegration:
                 fallbacks=["https://ads2.example.com/vast"],
             )
 
+    @pytest.mark.asyncio
     @patch("vast_client.multi_source.orchestrator.get_main_http_client")
     async def test_direct_orchestrator_usage(
         self, mock_get_client, mock_vast_response
@@ -125,10 +128,10 @@ class TestVastClientMultiSourceIntegration:
         assert result.parsed_data["ad_system"] == "Test Ad System"
 
 
-@pytest.mark.asyncio
 class TestBackwardCompatibility:
     """Test backward compatibility with existing code."""
 
+    @pytest.mark.asyncio
     @patch("vast_client.client.get_main_http_client")
     async def test_simple_url_initialization(
         self, mock_get_client, mock_vast_response
@@ -151,6 +154,7 @@ class TestBackwardCompatibility:
         assert isinstance(result, dict)
         assert "ad_system" in result
 
+    @pytest.mark.asyncio
     @patch("vast_client.client.get_main_http_client")
     async def test_from_uri_classmethod(self, mock_get_client, mock_vast_response):
         """Test from_uri classmethod still works."""

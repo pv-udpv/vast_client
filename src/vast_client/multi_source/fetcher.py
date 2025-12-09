@@ -106,13 +106,18 @@ class VastMultiSourceFetcher:
         result.metadata["source_count"] = len(sources)
         result.metadata["mode"] = strategy.mode
 
-        self.logger.info(
-            VastEvents.REQUEST_COMPLETED,
-            success=result.success,
-            elapsed_time=elapsed,
-            source_url=result.source_url,
-            error_count=len(result.errors),
-        )
+        if result.success:
+            self.logger.info(
+                VastEvents.REQUEST_SUCCESS,
+                elapsed_time=elapsed,
+                source_url=result.source_url,
+            )
+        else:
+            self.logger.info(
+                VastEvents.REQUEST_FAILED,
+                elapsed_time=elapsed,
+                error_count=len(result.errors),
+            )
 
         return result
 
@@ -326,7 +331,7 @@ class VastMultiSourceFetcher:
                     },
                 )
 
-            except asyncio.TimeoutError as e:
+            except asyncio.TimeoutError:
                 last_error = f"Timeout after {strategy.per_source_timeout}s"
                 self.logger.warning(
                     "Fetch timeout",

@@ -66,7 +66,7 @@ class TestVastMultiSourceOrchestrator:
         self, mock_get_client, mock_vast_response
     ):
         """Test pipeline execution with fallback."""
-        # First source fails, second succeeds
+        # Primary source fails all retries (3 attempts total: initial + 2 retries)
         mock_response_fail = MagicMock()
         mock_response_fail.status_code = 404
         mock_response_fail.raise_for_status = MagicMock(
@@ -80,8 +80,14 @@ class TestVastMultiSourceOrchestrator:
         mock_response_success.raise_for_status = MagicMock()
 
         mock_client = AsyncMock()
+        # First 3 calls fail (primary with retries), 4th succeeds (fallback)
         mock_client.get = AsyncMock(
-            side_effect=[mock_response_fail, mock_response_success]
+            side_effect=[
+                mock_response_fail,
+                mock_response_fail,
+                mock_response_fail,
+                mock_response_success,
+            ]
         )
         mock_get_client.return_value = mock_client
 

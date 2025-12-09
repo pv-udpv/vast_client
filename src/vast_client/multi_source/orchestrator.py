@@ -5,10 +5,6 @@ Main coordinator for multi-source VAST operations. Implements the pipeline:
 FETCH → PARSE → SELECT → TRACK
 """
 
-from typing import Any
-
-import httpx
-
 from ..events import VastEvents
 from ..http_client_manager import get_main_http_client, get_tracking_http_client
 from ..log_config import get_context_logger
