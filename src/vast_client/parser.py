@@ -287,7 +287,7 @@ class VastParser:
                 "Duration parsed successfully", duration_seconds=duration
             )
             return duration
-        except (ValueError, IndexError) as e:
+        except ValueError as e:
             raise VastDurationError(
                 f"Failed to parse duration value: {str(e)}",
                 duration_text=duration_text,
