@@ -17,6 +17,76 @@ from ..routes.helpers import build_url_preserving_unicode
 from .fetch_config import FetchMode, FetchResult, FetchStrategy
 
 
+def _normalize_source(
+    source: str | dict[str, Any],
+    global_params: dict[str, Any] | None = None,
+    global_headers: dict[str, str] | None = None,
+) -> tuple[str, dict[str, Any], dict[str, str]]:
+    """
+    Normalize a source configuration to URL, params, and headers.
+
+    Args:
+        source: Source URL string or dict configuration
+        global_params: Global parameters to merge
+        global_headers: Global headers to merge
+
+    Returns:
+        Tuple of (url, params, headers)
+
+    Examples:
+        >>> url, params, headers = _normalize_source("https://ads.example.com/vast")
+        >>> url
+        'https://ads.example.com/vast'
+
+        >>> url, params, headers = _normalize_source({
+        ...     "base_url": "https://ads.example.com/vast",
+        ...     "params": {"slot": "pre-roll"}
+        ... })
+        >>> url
+        'https://ads.example.com/vast'
+        >>> params
+        {'slot': 'pre-roll'}
+    """
+    global_params = global_params or {}
+    global_headers = global_headers or {}
+
+    if isinstance(source, str):
+        # Simple URL string
+        return source, global_params.copy(), global_headers.copy()
+
+    elif isinstance(source, dict):
+        # Dict configuration (EmbedHttpClient-style)
+        base_url = source.get("base_url") or source.get("url")
+        if not base_url:
+            raise ValueError(
+                f"Dict source must have 'base_url' or 'url' key: {source}"
+            )
+
+        # Merge params: source params override global params
+        merged_params = {**global_params}
+        if "params" in source:
+            merged_params.update(source["params"])
+
+        # Merge headers: source headers override global headers
+        merged_headers = {**global_headers}
+        if "headers" in source:
+            merged_headers.update(source["headers"])
+
+        # Handle encoding_config if present
+        encoding_config = source.get("encoding_config", {})
+        if encoding_config:
+            # Store encoding config in metadata for later use
+            # For now, we'll build the URL with params and let the caller handle encoding
+            pass
+
+        return base_url, merged_params, merged_headers
+
+    else:
+        raise TypeError(
+            f"Source must be str or dict, got {type(source).__name__}: {source}"
+        )
+
+
 class VastMultiSourceFetcher:
     """
     Multi-source VAST fetcher with parallel and sequential strategies.
@@ -49,7 +119,7 @@ class VastMultiSourceFetcher:
 
     async def fetch_all(
         self,
-        sources: list[str],
+        sources: list[str | dict[str, Any]],
         strategy: FetchStrategy,
         http_client: httpx.AsyncClient,
         params: dict[str, Any] | None = None,
@@ -59,11 +129,11 @@ class VastMultiSourceFetcher:
         Fetch from all sources according to the strategy.
 
         Args:
-            sources: List of VAST source URLs
+            sources: List of VAST sources (URLs or dict configs)
             strategy: Fetch strategy configuration
             http_client: HTTP client for requests
-            params: Additional query parameters
-            headers: Additional headers
+            params: Additional query parameters (global)
+            headers: Additional headers (global)
 
         Returns:
             FetchResult: Result containing successful response or errors
@@ -123,8 +193,8 @@ class VastMultiSourceFetcher:
 
     async def fetch_with_fallbacks(
         self,
-        sources: list[str],
-        fallbacks: list[str],
+        sources: list[str | dict[str, Any]],
+        fallbacks: list[str | dict[str, Any]],
         strategy: FetchStrategy,
         http_client: httpx.AsyncClient,
         params: dict[str, Any] | None = None,
@@ -162,7 +232,7 @@ class VastMultiSourceFetcher:
 
     async def _fetch_parallel(
         self,
-        sources: list[str],
+        sources: list[str | dict[str, Any]],
         strategy: FetchStrategy,
         http_client: httpx.AsyncClient,
         params: dict[str, Any] | None,
@@ -189,7 +259,12 @@ class VastMultiSourceFetcher:
         errors = []
         for i, result in enumerate(results):
             if isinstance(result, Exception):
-                errors.append({"source": sources[i], "error": str(result)})
+                source = sources[i]
+                if isinstance(source, str):
+                    source_repr = source
+                else:
+                    source_repr = source.get("base_url", str(source))
+                errors.append({"source": source_repr, "error": str(result)})
             elif result.success:
                 return result  # Return first successful result
             else:
@@ -199,7 +274,7 @@ class VastMultiSourceFetcher:
 
     async def _fetch_sequential(
         self,
-        sources: list[str],
+        sources: list[str | dict[str, Any]],
         strategy: FetchStrategy,
         http_client: httpx.AsyncClient,
         params: dict[str, Any] | None,
@@ -222,7 +297,7 @@ class VastMultiSourceFetcher:
 
     async def _fetch_race(
         self,
-        sources: list[str],
+        sources: list[str | dict[str, Any]],
         strategy: FetchStrategy,
         http_client: httpx.AsyncClient,
         params: dict[str, Any] | None,
@@ -266,7 +341,7 @@ class VastMultiSourceFetcher:
 
     async def _fetch_single(
         self,
-        source: str,
+        source: str | dict[str, Any],
         strategy: FetchStrategy,
         http_client: httpx.AsyncClient,
         params: dict[str, Any] | None,
@@ -276,23 +351,32 @@ class VastMultiSourceFetcher:
         Fetch from a single source with retry logic.
 
         Args:
-            source: Source URL
+            source: Source URL or dict configuration
             strategy: Fetch strategy
             http_client: HTTP client
-            params: Additional query parameters
-            headers: Additional headers
+            params: Additional query parameters (global)
+            headers: Additional headers (global)
 
         Returns:
             FetchResult: Result of the fetch operation
         """
-        # Build final URL
-        final_params = params or {}
-        final_headers = headers or {}
+        # Normalize source to URL, params, and headers
+        try:
+            base_url, source_params, source_headers = _normalize_source(
+                source, params, headers
+            )
+        except (ValueError, TypeError) as e:
+            return FetchResult(
+                success=False,
+                source_url=str(source),
+                errors=[{"source": str(source), "error": f"Invalid source config: {e}"}],
+            )
 
-        if final_params:
-            final_url = build_url_preserving_unicode(source, final_params)
+        # Build final URL with params
+        if source_params:
+            final_url = build_url_preserving_unicode(base_url, source_params)
         else:
-            final_url = source
+            final_url = base_url
 
         # Retry logic
         last_error = None
@@ -300,29 +384,29 @@ class VastMultiSourceFetcher:
             try:
                 self.logger.debug(
                     "Fetching VAST",
-                    source=source,
+                    source=base_url,
                     attempt=attempt + 1,
                     max_retries=strategy.max_retries,
                 )
 
                 response = await asyncio.wait_for(
-                    http_client.get(final_url, headers=final_headers),
+                    http_client.get(final_url, headers=source_headers),
                     timeout=strategy.per_source_timeout,
                 )
 
                 if response.status_code == 204:
-                    self.logger.debug("Received 204 No Content", source=source)
+                    self.logger.debug("Received 204 No Content", source=base_url)
                     return FetchResult(
                         success=False,
-                        source_url=source,
-                        errors=[{"source": source, "error": "No content (204)"}],
+                        source_url=base_url,
+                        errors=[{"source": base_url, "error": "No content (204)"}],
                     )
 
                 response.raise_for_status()
 
                 return FetchResult(
                     success=True,
-                    source_url=source,
+                    source_url=base_url,
                     raw_response=response.text,
                     metadata={
                         "status_code": response.status_code,
@@ -335,7 +419,7 @@ class VastMultiSourceFetcher:
                 last_error = f"Timeout after {strategy.per_source_timeout}s"
                 self.logger.warning(
                     "Fetch timeout",
-                    source=source,
+                    source=base_url,
                     attempt=attempt + 1,
                     timeout=strategy.per_source_timeout,
                 )
@@ -344,7 +428,7 @@ class VastMultiSourceFetcher:
                 last_error = f"HTTP {e.response.status_code}"
                 self.logger.warning(
                     "HTTP error",
-                    source=source,
+                    source=base_url,
                     status_code=e.response.status_code,
                     attempt=attempt + 1,
                 )
@@ -353,7 +437,7 @@ class VastMultiSourceFetcher:
                 last_error = str(e)
                 self.logger.warning(
                     "Fetch error",
-                    source=source,
+                    source=base_url,
                     error=str(e),
                     error_type=type(e).__name__,
                     attempt=attempt + 1,
@@ -366,8 +450,8 @@ class VastMultiSourceFetcher:
         # All retries failed
         return FetchResult(
             success=False,
-            source_url=source,
-            errors=[{"source": source, "error": last_error}],
+            source_url=base_url,
+            errors=[{"source": base_url, "error": last_error}],
         )
 
 

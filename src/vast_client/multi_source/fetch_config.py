@@ -72,9 +72,19 @@ class VastFetchConfig:
     with optional fallback sources. Single-source requests are handled as a special
     case with sources=[url].
 
+    Sources can be either:
+    - Simple URL strings: "https://ads.example.com/vast"
+    - Dict configurations (EmbedHttpClient-style):
+      {
+          "base_url": "https://ads.example.com/vast",
+          "params": {"publisher": "acme"},
+          "headers": {"User-Agent": "Device/1.0"},
+          "encoding_config": {"city": False}
+      }
+
     Attributes:
-        sources: List of primary VAST source URLs
-        fallbacks: Optional list of fallback URLs (used if all primary sources fail)
+        sources: List of primary VAST sources (URLs or dict configs)
+        fallbacks: Optional list of fallback sources (URLs or dict configs)
         strategy: Fetch strategy configuration
         params: Additional query parameters to merge with all requests
         headers: Additional headers to merge with all requests
@@ -82,17 +92,30 @@ class VastFetchConfig:
         auto_track: Whether to automatically track impression/start events
 
     Examples:
-        Single-source (margin case):
+        Single-source with URL (margin case):
         >>> config = VastFetchConfig(sources=["https://ads.example.com/vast"])
 
-        Multi-source with fallback:
+        Single-source with dict config:
+        >>> config = VastFetchConfig(sources=[{
+        ...     "base_url": "https://ads.example.com/vast",
+        ...     "params": {"slot": "pre-roll"},
+        ...     "headers": {"User-Agent": "CTV-Device/1.0"}
+        ... }])
+
+        Multi-source with mixed types:
         >>> config = VastFetchConfig(
-        ...     sources=["https://ads1.com/vast", "https://ads2.com/vast"],
+        ...     sources=[
+        ...         "https://ads1.com/vast",  # URL string
+        ...         {  # Dict config
+        ...             "base_url": "https://ads2.com/vast",
+        ...             "params": {"publisher": "acme"}
+        ...         }
+        ...     ],
         ...     fallbacks=["https://fallback.com/vast"],
         ...     strategy=FetchStrategy(mode=FetchMode.PARALLEL)
         ... )
 
-        With additional parameters:
+        With additional parameters (merged with source configs):
         >>> config = VastFetchConfig(
         ...     sources=["https://ads.example.com/vast"],
         ...     params={"slot": "pre-roll", "publisher": "acme"},
@@ -100,8 +123,8 @@ class VastFetchConfig:
         ... )
     """
 
-    sources: list[str] = field(default_factory=list)
-    fallbacks: list[str] = field(default_factory=list)
+    sources: list[str | dict[str, Any]] = field(default_factory=list)
+    fallbacks: list[str | dict[str, Any]] = field(default_factory=list)
     strategy: FetchStrategy = field(default_factory=FetchStrategy)
     params: dict[str, Any] = field(default_factory=dict)
     headers: dict[str, str] = field(default_factory=dict)

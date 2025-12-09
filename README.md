@@ -216,7 +216,55 @@ if result.success:
     print(f"Ad from: {result.source_url}")
 ```
 
-#### 4. Multi-Source with Filtering
+#### 4. Multi-Source with Dict-Based Source Configurations
+
+Sources can be URLs or dict configurations (EmbedHttpClient-style):
+
+```python
+from vast_client import VastClient
+from vast_client.multi_source import VastFetchConfig
+
+client = VastClient("https://ads.example.com/vast")
+
+# Mix URL strings and dict configurations
+config = VastFetchConfig(
+    sources=[
+        "https://ads1.example.com/vast",  # Simple URL
+        {  # Dict configuration with custom params/headers
+            "base_url": "https://ads2.example.com/vast",
+            "params": {
+                "publisher": "acme",
+                "slot": "pre-roll",
+                "city": "Санкт-Петербург"  # Unicode support
+            },
+            "headers": {
+                "User-Agent": "CTV-Device/1.0",
+                "X-Custom-Header": "value"
+            },
+            "encoding_config": {
+                "city": False  # Don't URL-encode Cyrillic
+            }
+        },
+        {  # Another dict config
+            "base_url": "https://ads3.example.com/vast",
+            "params": {"format": "vast4"}
+        }
+    ],
+    fallbacks=[
+        {"base_url": "https://fallback.com/vast", "params": {"backup": "true"}}
+    ]
+)
+
+result = await client.multi_source.execute_pipeline(config)
+```
+
+**Dict configuration keys**:
+- `base_url` or `url`: The VAST endpoint URL (required)
+- `params`: Query parameters to append to URL
+- `headers`: HTTP headers for the request
+- `encoding_config`: Per-parameter encoding rules (dict of param_name → bool)
+
+#### 5. Multi-Source with Filtering
 
 Filter ads based on media type, duration, or other criteria:
 
@@ -252,7 +300,7 @@ config = VastFetchConfig(
 result = await client.multi_source.execute_pipeline(config)
 ```
 
-#### 5. Sequential Mode with Race
+#### 6. Sequential Mode with Race
 
 Fetch sources one by one or race for the fastest:
 
