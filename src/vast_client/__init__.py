@@ -10,9 +10,11 @@ This package provides:
 - VastTracker: Event tracking for VAST compliance
 - VastPlayer: Ad playback with progress tracking
 - Type definitions and configuration classes
+- Exception types for granular error handling
 
 Usage:
     from vast_client import VastClient, VastParser, VastTracker, VastPlayer
+    from vast_client import VastXMLError, VastTrackingError  # Error handling
 
     # Simple usage
     client = VastClient("https://ads.example.com/vast")
@@ -22,6 +24,18 @@ Usage:
     async with VastClient.from_config(config, ctx=ad_request) as client:
         ad_data = await client.request_ad(params={"slot": "pre-roll"})
         await client.play_ad(ad_data)
+
+    # Error handling
+    try:
+        ad_data = await client.request_ad()
+    except VastXMLError as e:
+        print(f"XML parsing failed: {e.message}")
+        print(f"Context: {e.context}")
+    except VastTrackingError as e:
+        print(f"Tracking failed: {e}")
+    except VastException as e:
+        # Catch all VAST errors
+        print(f"VAST error: {e}")
 """
 
 from .client import VastClient
@@ -63,6 +77,23 @@ from .time_provider import (
     AutoDetectTimeProvider,
     create_time_provider,
 )
+from .exceptions import (
+    VastException,
+    VastParseError,
+    VastXMLError,
+    VastElementError,
+    VastExtensionError,
+    VastDurationError,
+    VastTrackingError,
+    VastTrackingURLError,
+    VastTrackingNetworkError,
+    VastConfigError,
+    VastConfigValidationError,
+    VastConfigNotFoundError,
+    VastHTTPError,
+    VastHTTPTimeoutError,
+    VastHTTPSSLError,
+)
 
 __version__ = "1.0.0"
 __author__ = "CTV Middleware Team"
@@ -90,7 +121,7 @@ __all__ = [
     "create_headless_player",
     # HTTP Client
     "EmbedHttpClient",
-    # Provider configuration (NEW)
+    # Provider configuration
     "ProviderConfigLoader",
     "TemplateResolver",
     "IPPoolSelector",
@@ -108,6 +139,22 @@ __all__ = [
     "SimulatedTimeProvider",
     "AutoDetectTimeProvider",
     "create_time_provider",
+    # Exception types (NEW)
+    "VastException",
+    "VastParseError",
+    "VastXMLError",
+    "VastElementError",
+    "VastExtensionError",
+    "VastDurationError",
+    "VastTrackingError",
+    "VastTrackingURLError",
+    "VastTrackingNetworkError",
+    "VastConfigError",
+    "VastConfigValidationError",
+    "VastConfigNotFoundError",
+    "VastHTTPError",
+    "VastHTTPTimeoutError",
+    "VastHTTPSSLError",
     # Package metadata
     "__version__",
     "__author__",

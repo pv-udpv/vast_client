@@ -5,6 +5,11 @@ from typing import Any
 from lxml import etree
 
 from .events import VastEvents
+from .exceptions import (
+    VastDurationError,
+    VastElementError,
+    VastXMLError,
+)
 from .log_config import get_context_logger
 
 
@@ -32,7 +37,7 @@ class VastParser:
             Parsed VAST data as dictionary
 
         Raises:
-            etree.XMLSyntaxError: If XML parsing fails
+            VastXMLError: If XML parsing fails
         """
         self.logger.debug(VastEvents.PARSE_STARTED, xml_length=len(xml_string))
 
@@ -51,7 +56,20 @@ class VastParser:
             self.logger.error(
                 VastEvents.PARSE_FAILED, error=str(e), xml_preview=xml_string[:200]
             )
-            raise
+            raise VastXMLError(
+                f"Failed to parse VAST XML: {str(e)}",
+                xml_preview=xml_string[:200],
+                parser_error=e,
+            ) from e
+        except (UnicodeDecodeError, ValueError) as e:
+            self.logger.error(
+                VastEvents.PARSE_FAILED, error=str(e), xml_preview=xml_string[:200]
+            )
+            raise VastXMLError(
+                f"Failed to decode or parse VAST XML: {str(e)}",
+                xml_preview=xml_string[:200],
+                parser_error=e,
+            ) from e
 
         # Parse main elements using configurable XPath
         vast_version = root.get("version")
@@ -135,6 +153,9 @@ class VastParser:
 
         Returns:
             Dictionary of parsed extensions
+
+        Raises:
+            VastExtensionError: If extension parsing fails (logged as warning)
         """
         self.logger.debug("Parsing VAST extensions")
         extensions = {}
@@ -145,24 +166,53 @@ class VastParser:
             for extension in extension_elems:
                 type_attr = extension.get("type")
                 if type_attr:
-                    extensions[type_attr] = self.element_to_dict(extension)
-                    self.logger.debug("Parsed extension", type=type_attr)
+                    try:
+                        extensions[type_attr] = self.element_to_dict(extension)
+                        self.logger.debug("Parsed extension", type=type_attr)
+                    except VastElementError as e:
+                        self.logger.warning(
+                            f"Failed to parse extension of type {type_attr}: {e.message}",
+                            error=str(e),
+                            extension_type=type_attr,
+                        )
+                        # Continue parsing other extensions
+                        continue
 
             # Parse custom XPath fields
             for field_name, xpath in self.config.custom_xpaths.items():
-                custom_elems = root.findall(xpath)
-                if custom_elems:
-                    extensions[field_name] = [
-                        elem.text for elem in custom_elems if elem.text
-                    ]
-                    self.logger.debug(
-                        "Parsed custom field",
+                try:
+                    custom_elems = root.findall(xpath)
+                    if custom_elems:
+                        extensions[field_name] = [
+                            elem.text for elem in custom_elems if elem.text
+                        ]
+                        self.logger.debug(
+                            "Parsed custom field",
+                            field_name=field_name,
+                            values_count=len(extensions[field_name])
+                        )
+                except (ValueError, etree.XPathError) as e:
+                    self.logger.warning(
+                        f"Failed to parse custom XPath field {field_name}: {str(e)}",
+                        error=str(e),
                         field_name=field_name,
-                        values_count=len(extensions[field_name])
                     )
+                    # Continue parsing other custom fields
+                    continue
 
+        except etree.XPathError as e:
+            self.logger.warning(
+                f"XPath error while parsing extensions: {str(e)}",
+                error=str(e),
+            )
+            # Return partial results
         except Exception as e:
-            self.logger.warning("Failed to parse extensions", error=str(e))
+            # Catch any remaining unexpected errors
+            self.logger.error(
+                f"Unexpected error while parsing extensions: {str(e)}",
+                error=str(e),
+            )
+            # Return partial results - extensions are not critical
 
         self.logger.debug(
             "Extensions parsing completed", extensions_count=len(extensions)
@@ -177,6 +227,9 @@ class VastParser:
 
         Returns:
             Duration in seconds or None if not found/invalid
+
+        Raises:
+            VastDurationError: If duration parsing fails (logged as warning)
         """
         self.logger.debug("Parsing VAST duration")
         try:
@@ -186,33 +239,58 @@ class VastParser:
                 self.logger.debug(
                     "Found duration element", duration_text=duration_elem.text
                 )
-                try:
-                    duration_parts = duration_elem.text.split(":")
-                    if len(duration_parts) == 3:
-                        duration = (
-                            int(float(duration_parts[0])) * 3600
-                            + int(float(duration_parts[1])) * 60
-                            + int(float(duration_parts[2]))
-                        )
-                        self.logger.debug(
-                            "Duration parsed successfully", duration_seconds=duration
-                        )
-                        return duration
-                    else:
-                        self.logger.warning(
-                            "Invalid duration format", duration_text=duration_elem.text
-                        )
-                except (ValueError, IndexError) as e:
-                    self.logger.warning(
-                        "Failed to parse duration",
-                        duration_text=duration_elem.text,
-                        error=str(e),
-                    )
-            else:
-                self.logger.debug("No duration element found")
+                return self._parse_duration_string(duration_elem.text)
+            self.logger.debug("No duration element found")
+            return None
+        except VastDurationError as e:
+            self.logger.warning(
+                "Failed to parse duration",
+                error=str(e),
+                message=e.message,
+                duration_text=e.duration_text,
+            )
+            return None
         except Exception as e:
-            self.logger.warning("Failed to find duration element", error=str(e))
-        return None
+            self.logger.warning(
+                f"Unexpected error while finding duration element: {str(e)}",
+                error=str(e),
+            )
+            return None
+
+    def _parse_duration_string(self, duration_text: str) -> int:
+        """Parse duration string in HH:MM:SS format.
+
+        Args:
+            duration_text: Duration string (e.g., "00:00:30")
+
+        Returns:
+            Duration in seconds
+
+        Raises:
+            VastDurationError: If duration format is invalid
+        """
+        try:
+            duration_parts = duration_text.split(":")
+            if len(duration_parts) != 3:
+                raise VastDurationError(
+                    f"Invalid duration format: {duration_text}. Expected HH:MM:SS",
+                    duration_text=duration_text,
+                )
+
+            duration = (
+                int(float(duration_parts[0])) * 3600
+                + int(float(duration_parts[1])) * 60
+                + int(float(duration_parts[2]))
+            )
+            self.logger.debug(
+                "Duration parsed successfully", duration_seconds=duration
+            )
+            return duration
+        except (ValueError, IndexError) as e:
+            raise VastDurationError(
+                f"Failed to parse duration value: {str(e)}",
+                duration_text=duration_text,
+            ) from e
 
     def element_to_dict(self, element: etree._Element) -> dict[str, Any]:
         """Convert XML element to dictionary.
@@ -222,6 +300,9 @@ class VastParser:
 
         Returns:
             Dictionary representation of the element
+
+        Raises:
+            VastElementError: If element conversion fails
         """
         result = {}
         try:
@@ -236,15 +317,33 @@ class VastParser:
                     if len(child) == 0:
                         result[child.tag] = child.text
                     else:
-                        result[child.tag] = self.element_to_dict(child)
+                        try:
+                            result[child.tag] = self.element_to_dict(child)
+                        except VastElementError:
+                            # Re-raise VastElementErrors
+                            raise
+                        except Exception as e:
+                            raise VastElementError(
+                                f"Failed to recursively convert child element: {str(e)}",
+                                element_tag=child.tag,
+                                operation="recursive_conversion",
+                            ) from e
+        except VastElementError:
+            # Re-raise VastElementErrors
+            raise
+        except AttributeError as e:
+            raise VastElementError(
+                f"Invalid element structure: {str(e)}",
+                element_tag=getattr(element, "tag", "unknown"),
+                operation="element_access",
+            ) from e
         except Exception as e:
-            self.logger.warning(
-                "Failed to convert element to dict",
-                error=str(e),
+            raise VastElementError(
+                f"Failed to convert element to dictionary: {str(e)}",
                 element_tag=element.tag,
-            )
+                operation="to_dict",
+            ) from e
         return result
-
 
     @classmethod
     def from_config(cls, config: dict[str, Any]) -> "VastParser":
@@ -259,5 +358,6 @@ class VastParser:
         from .config import VastParserConfig
         parser_config = VastParserConfig(**config)
         return cls(config=parser_config)
+
 
 __all__ = ["VastParser"]
