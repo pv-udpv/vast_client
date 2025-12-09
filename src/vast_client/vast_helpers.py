@@ -45,8 +45,10 @@ def prepare_tracking_events(vast_data: dict[str, Any]) -> dict[str, list[str]]:
         ['https://example.com/impression']
     """
     tracking_events = vast_data.get("tracking_events", {}).copy()
-    tracking_events.update({"impression": vast_data.get("impression", [])})
-    tracking_events.update({"error": vast_data.get("error", [])})
+    tracking_events.update({
+        "impression": vast_data.get("impression", []),
+        "error": vast_data.get("error", [])
+    })
     return tracking_events
 
 
