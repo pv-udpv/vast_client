@@ -60,6 +60,45 @@ class TestVASTParserBackwardCompat:
         
         assert len(result['tracking']) == 2
         assert result['tracking'][0]['event'] == 'start'
+    
+    def test_parse_file_not_found(self):
+        """parse_file() raises FileNotFoundError for missing files"""
+        parser = VASTParser()
+        
+        with pytest.raises(FileNotFoundError):
+            parser.parse_file("/nonexistent/path/to/file.xml")
+    
+    def test_parse_file_permission_error(self, tmp_path):
+        """parse_file() raises PermissionError for inaccessible files"""
+        import os
+        import stat
+        
+        # Create a file with no read permissions
+        test_file = tmp_path / "no_read.xml"
+        test_file.write_text("<VAST/>")
+        
+        # Remove read permissions
+        os.chmod(test_file, stat.S_IWUSR)
+        
+        parser = VASTParser()
+        
+        try:
+            with pytest.raises((PermissionError, OSError)):
+                parser.parse_file(str(test_file))
+        finally:
+            # Restore permissions for cleanup
+            os.chmod(test_file, stat.S_IRUSR | stat.S_IWUSR)
+    
+    def test_parse_file_unicode_error(self, tmp_path):
+        """parse_file() raises UnicodeDecodeError for invalid encoding"""
+        # Create a file with invalid UTF-8 bytes
+        test_file = tmp_path / "invalid_utf8.xml"
+        test_file.write_bytes(b'\x80\x81\x82\x83')
+        
+        parser = VASTParser()
+        
+        with pytest.raises(UnicodeDecodeError):
+            parser.parse_file(str(test_file))
 
 
 class TestEnhancedVASTParser:
