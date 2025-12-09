@@ -82,9 +82,29 @@ class VASTParser:
         return result
     
     def parse_file(self, filepath: str) -> Dict[str, Any]:
-        """Parse VAST from file"""
-        with open(filepath, 'r', encoding='utf-8') as f:
-            return self.parse(f.read())
+        """Parse VAST from file with proper error handling
+        
+        Args:
+            filepath: Path to VAST XML file
+            
+        Returns:
+            Parsed VAST data as dictionary
+            
+        Raises:
+            FileNotFoundError: If file doesn't exist
+            PermissionError: If file cannot be accessed
+            UnicodeDecodeError: If file encoding is invalid
+            OSError: For other I/O errors
+        """
+        try:
+            with open(filepath, 'r', encoding='utf-8') as f:
+                return self.parse(f.read())
+        except FileNotFoundError:
+            # Re-raise to let caller handle missing file
+            raise
+        except (UnicodeDecodeError, OSError):
+            # Re-raise encoding or I/O errors
+            raise
 
 
 class EnhancedVASTParser(VASTParser):
@@ -215,7 +235,7 @@ class EnhancedVASTParser(VASTParser):
                 val = elem.get(part[1:]) or "?"
                 values.append(val)
             else:
-                values.append(part.strip("'\"")
+                values.append(part.strip("'\""))
         
         return "".join(values)
     
