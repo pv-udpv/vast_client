@@ -6,6 +6,7 @@ import pytest
 from lxml import etree
 
 from vast_client.config import VastParserConfig
+from vast_client.exceptions import VastXMLError
 from vast_client.parser import VastParser
 
 
@@ -227,7 +228,7 @@ class TestIABVastSamplesDetailed:
                 assert "tracking_events" in vast_data, f"{xml_file.name}: missing tracking_events"
                 assert isinstance(vast_data["tracking_events"], dict)
 
-            except etree.XMLSyntaxError:
+            except VastXMLError:
                 # Some samples might be intentionally malformed
                 continue
             except Exception as e:
