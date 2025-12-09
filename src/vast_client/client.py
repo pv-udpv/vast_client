@@ -451,13 +451,8 @@ class VastClient:
 
     async def close(self):
         """Close client and cleanup resources."""
-        # Don't close global HTTP client - managed by manager
-        if self.client is not None and hasattr(self.client, "_is_global_client"):
-            # This is global client, don't close it
-            pass
-        elif self.client is not None:
-            # This is local client, close it
-            await self.client.aclose()
+        # HTTP clients are now managed by the http_client_manager
+        # No cleanup needed here as clients are cached globally
 
         self.logger.info("VastClient closed")
         # Clear playback context when closing client
