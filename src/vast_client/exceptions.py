@@ -9,7 +9,8 @@ Exception Hierarchy:
     ├── VastParseError
     │   ├── VastXMLError
     │   ├── VastElementError
-    │   └── VastExtensionError
+    │   ├── VastExtensionError
+    │   └── VastDurationError
     ├── VastTrackingError
     │   ├── VastTrackingURLError
     │   └── VastTrackingNetworkError
@@ -21,8 +22,6 @@ Exception Hierarchy:
         └── VastHTTPSSLError
 """
 
-from typing import Optional
-
 
 class VastException(Exception):
     """Base exception for all VAST client errors.
@@ -31,7 +30,7 @@ class VastException(Exception):
     catching all VAST errors with a single except clause.
     """
 
-    def __init__(self, message: str, context: Optional[dict] = None):
+    def __init__(self, message: str, context: dict | None = None):
         """Initialize VAST exception.
 
         Args:
@@ -74,9 +73,9 @@ class VastXMLError(VastParseError):
     def __init__(
         self,
         message: str,
-        xml_preview: Optional[str] = None,
-        parser_error: Optional[Exception] = None,
-        context: Optional[dict] = None,
+        xml_preview: str | None = None,
+        parser_error: Exception | None = None,
+        context: dict | None = None,
     ):
         """Initialize XML error.
 
@@ -109,9 +108,9 @@ class VastElementError(VastParseError):
     def __init__(
         self,
         message: str,
-        element_tag: Optional[str] = None,
-        operation: Optional[str] = None,
-        context: Optional[dict] = None,
+        element_tag: str | None = None,
+        operation: str | None = None,
+        context: dict | None = None,
     ):
         """Initialize element error.
 
@@ -143,9 +142,9 @@ class VastExtensionError(VastParseError):
     def __init__(
         self,
         message: str,
-        extension_type: Optional[str] = None,
-        field_name: Optional[str] = None,
-        context: Optional[dict] = None,
+        extension_type: str | None = None,
+        field_name: str | None = None,
+        context: dict | None = None,
     ):
         """Initialize extension error.
 
@@ -176,8 +175,8 @@ class VastDurationError(VastParseError):
     def __init__(
         self,
         message: str,
-        duration_text: Optional[str] = None,
-        context: Optional[dict] = None,
+        duration_text: str | None = None,
+        context: dict | None = None,
     ):
         """Initialize duration error.
 
@@ -216,9 +215,9 @@ class VastTrackingURLError(VastTrackingError):
     def __init__(
         self,
         message: str,
-        url: Optional[str] = None,
-        url_type: Optional[str] = None,
-        context: Optional[dict] = None,
+        url: str | None = None,
+        url_type: str | None = None,
+        context: dict | None = None,
     ):
         """Initialize tracking URL error.
 
@@ -250,9 +249,9 @@ class VastTrackingNetworkError(VastTrackingError):
     def __init__(
         self,
         message: str,
-        http_status: Optional[int] = None,
-        network_error: Optional[Exception] = None,
-        context: Optional[dict] = None,
+        http_status: int | None = None,
+        network_error: Exception | None = None,
+        context: dict | None = None,
     ):
         """Initialize tracking network error.
 
@@ -293,9 +292,9 @@ class VastConfigValidationError(VastConfigError):
     def __init__(
         self,
         message: str,
-        config_key: Optional[str] = None,
-        config_value: Optional[str] = None,
-        context: Optional[dict] = None,
+        config_key: str | None = None,
+        config_value: str | None = None,
+        context: dict | None = None,
     ):
         """Initialize config validation error.
 
@@ -326,8 +325,8 @@ class VastConfigNotFoundError(VastConfigError):
     def __init__(
         self,
         message: str,
-        config_key: Optional[str] = None,
-        context: Optional[dict] = None,
+        config_key: str | None = None,
+        context: dict | None = None,
     ):
         """Initialize config not found error.
 
@@ -366,9 +365,9 @@ class VastHTTPTimeoutError(VastHTTPError):
     def __init__(
         self,
         message: str,
-        timeout: Optional[float] = None,
-        operation: Optional[str] = None,
-        context: Optional[dict] = None,
+        timeout: float | None = None,
+        operation: str | None = None,
+        context: dict | None = None,
     ):
         """Initialize HTTP timeout error.
 
@@ -400,9 +399,9 @@ class VastHTTPSSLError(VastHTTPError):
     def __init__(
         self,
         message: str,
-        url: Optional[str] = None,
-        ssl_error: Optional[Exception] = None,
-        context: Optional[dict] = None,
+        url: str | None = None,
+        ssl_error: Exception | None = None,
+        context: dict | None = None,
     ):
         """Initialize SSL error.
 

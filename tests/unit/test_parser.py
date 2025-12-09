@@ -1,9 +1,9 @@
 """Unit tests for VAST parser."""
 
 import pytest
-from lxml import etree
 
 from vast_client.config import VastParserConfig
+from vast_client.exceptions import VastXMLError
 from vast_client.parser import VastParser
 
 
@@ -106,8 +106,8 @@ class TestVastParser:
     </InLine>
 </VAST>"""
 
-        # Without recovery, should raise XMLSyntaxError
-        with pytest.raises(etree.XMLSyntaxError):
+        # Without recovery, should raise VastXMLError
+        with pytest.raises(VastXMLError):
             parser.parse_vast(malformed_xml)
 
     def test_parse_duration_formats(self, vast_parser):
