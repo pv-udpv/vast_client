@@ -8,7 +8,6 @@ from .events import VastEvents
 from .exceptions import (
     VastDurationError,
     VastElementError,
-    VastExtensionError,
     VastXMLError,
 )
 from .log_config import get_context_logger
