@@ -132,7 +132,15 @@ class EnhancedVASTParser(VASTParser):
             return
         
         # Find elements
-        elements = root.xpath(xpath, namespaces=self.namespaces)
+        try:
+            elements = root.xpath(xpath, namespaces=self.namespaces)
+        except etree.XPathEvalError as e:
+            if hasattr(self, "logger"):
+                self.logger.error("xpath_eval_failed", xpath=xpath, error=str(e))
+            else:
+                # Fallback: print or ignore if logger not present
+                pass
+            return
         if not elements:
             return
         
