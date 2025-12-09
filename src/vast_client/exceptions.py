@@ -23,6 +23,8 @@ Exception Hierarchy:
 """
 
 
+
+
 class VastException(Exception):
     """Base exception for all VAST client errors.
 
