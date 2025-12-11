@@ -1,0 +1,58 @@
+# VAST Configuration for Adaptive Bitrate Streaming (ABR)
+# Select best video variants based on bandwidth and device
+
+media_files:
+  # HD videos (1280p and above)
+  hd:
+    xpath: "//vast:MediaFile[@type='video/mp4'][@width >= '1280']"
+    merge: append
+    target: adaptive.hd
+    extract_node: true
+    fields:
+      id: "@id"
+      type: "@type"
+      bitrate: "@bitrate"
+      width: "@width"
+      height: "@height"
+      codec: "@codec"
+      url: "text()"
+    sort_by: "bitrate"
+    sort_order: "desc"
+    limit: 1
+
+  # SD videos (854p)
+  sd:
+    xpath: "//vast:MediaFile[@type='video/mp4'][@width >= '640' and @width < '1280']"
+    merge: append
+    target: adaptive.sd
+    extract_node: true
+    fields:
+      id: "@id"
+      bitrate: "@bitrate"
+      url: "text()"
+    sort_by: "bitrate"
+    sort_order: "desc"
+    limit: 1
+
+  # Mobile videos (640p and below)
+  mobile:
+    xpath: "//vast:MediaFile[@type='video/mp4'][@width <= '640']"
+    merge: append
+    target: adaptive.mobile
+    extract_node: true
+    fields:
+      id: "@id"
+      bitrate: "@bitrate"
+      url: "text()"
+    limit: 1
+
+tracking:
+  impressions:
+    xpath: "//vast:Impression/text()"
+    merge: append
+    target: tracking.impressions
+
+  errors:
+    xpath: "//vast:Error/text()"
+    merge: append
+    target: tracking.errors
