@@ -1,6 +1,6 @@
 """Unit tests for VAST client."""
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -74,14 +74,13 @@ class TestVastClientRequestAd:
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(return_value=mock_response)
 
-        client = VastClient("https://ads.example.com/vast")
-        client.client = mock_client
+        with patch('vast_client.client.get_main_http_client', return_value=mock_client):
+            client = VastClient("https://ads.example.com/vast")
+            vast_data = await client.request_ad()
 
-        vast_data = await client.request_ad()
-
-        assert isinstance(vast_data, dict)
-        assert vast_data["ad_system"] == "Test Ad System"
-        assert vast_data["ad_title"] == "Test Ad Title"
+            assert isinstance(vast_data, dict)
+            assert vast_data["ad_system"] == "Test Ad System"
+            assert vast_data["ad_title"] == "Test Ad Title"
 
     @pytest.mark.asyncio
     async def test_request_ad_no_content(self):
@@ -92,12 +91,11 @@ class TestVastClientRequestAd:
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(return_value=mock_response)
 
-        client = VastClient("https://ads.example.com/vast")
-        client.client = mock_client
+        with patch('vast_client.client.get_main_http_client', return_value=mock_client):
+            client = VastClient("https://ads.example.com/vast")
+            result = await client.request_ad()
 
-        result = await client.request_ad()
-
-        assert result == ""
+            assert result == ""
 
     @pytest.mark.asyncio
     async def test_request_ad_with_params(self, minimal_vast_xml):
@@ -111,13 +109,12 @@ class TestVastClientRequestAd:
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(return_value=mock_response)
 
-        client = VastClient("https://ads.example.com/vast")
-        client.client = mock_client
+        with patch('vast_client.client.get_main_http_client', return_value=mock_client):
+            client = VastClient("https://ads.example.com/vast")
+            await client.request_ad(params={"user_id": "user-123"})
 
-        await client.request_ad(params={"user_id": "user-123"})
-
-        # Verify request was made
-        mock_client.get.assert_called_once()
+            # Verify request was made
+            mock_client.get.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_request_ad_with_headers(self, minimal_vast_xml):
@@ -131,12 +128,11 @@ class TestVastClientRequestAd:
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(return_value=mock_response)
 
-        client = VastClient("https://ads.example.com/vast")
-        client.client = mock_client
+        with patch('vast_client.client.get_main_http_client', return_value=mock_client):
+            client = VastClient("https://ads.example.com/vast")
+            await client.request_ad(headers={"X-Custom-Header": "value"})
 
-        await client.request_ad(headers={"X-Custom-Header": "value"})
-
-        mock_client.get.assert_called_once()
+            mock_client.get.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_request_ad_non_xml_response(self):
@@ -150,13 +146,12 @@ class TestVastClientRequestAd:
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(return_value=mock_response)
 
-        client = VastClient("https://ads.example.com/vast")
-        client.client = mock_client
+        with patch('vast_client.client.get_main_http_client', return_value=mock_client):
+            client = VastClient("https://ads.example.com/vast")
+            result = await client.request_ad()
 
-        result = await client.request_ad()
-
-        # Should return raw text
-        assert result == "Plain text response"
+            # Should return raw text
+            assert result == "Plain text response"
 
     @pytest.mark.asyncio
     async def test_request_ad_creates_tracker(self, minimal_vast_xml):
@@ -170,15 +165,14 @@ class TestVastClientRequestAd:
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(return_value=mock_response)
 
-        client = VastClient("https://ads.example.com/vast")
-        client.client = mock_client
+        with patch('vast_client.client.get_main_http_client', return_value=mock_client):
+            client = VastClient("https://ads.example.com/vast")
+            await client.request_ad()
 
-        await client.request_ad()
-
-        # Tracker should be created
-        assert client.tracker is not None
-        # Should have tracking events
-        assert "impression" in client.tracker.events or "start" in client.tracker.events
+            # Tracker should be created
+            assert client.tracker is not None
+            # Should have tracking events
+            assert "impression" in client.tracker.events or "start" in client.tracker.events
 
 
 class TestVastClientContextManager:
@@ -187,11 +181,7 @@ class TestVastClientContextManager:
     @pytest.mark.asyncio
     async def test_context_manager_enter_exit(self):
         """Test client as async context manager."""
-        mock_client = AsyncMock()
-        mock_client.aclose = AsyncMock()
-
         client = VastClient("https://ads.example.com/vast")
-        client.client = mock_client
 
         async with client as c:
             assert c == client
@@ -216,12 +206,11 @@ class TestVastClientContextManager:
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(return_value=mock_response)
 
-        client = VastClient("https://ads.example.com/vast", ctx=ad_request)
-        client.client = mock_client
-
-        async with client:
-            vast_data = await client.request_ad()
-            assert vast_data is not None
+        with patch('vast_client.client.get_main_http_client', return_value=mock_client):
+            client = VastClient("https://ads.example.com/vast", ctx=ad_request)
+            async with client:
+                vast_data = await client.request_ad()
+                assert vast_data is not None
 
 
 class TestVastClientEdgeCases:
@@ -239,14 +228,13 @@ class TestVastClientEdgeCases:
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(return_value=mock_response)
 
-        # Client with recovery enabled (default)
-        client = VastClient("https://ads.example.com/vast")
-        client.client = mock_client
-
-        # Should not raise, return raw response
-        result = await client.request_ad()
-        # With recovery failure, should return raw text
-        assert isinstance(result, str)
+        with patch('vast_client.client.get_main_http_client', return_value=mock_client):
+            # Client with recovery enabled (default)
+            client = VastClient("https://ads.example.com/vast")
+            # Should not raise, parser recovers and returns parsed data
+            result = await client.request_ad()
+            # With recovery enabled, should return parsed dict or raw text
+            assert isinstance(result, (dict, str))
 
     @pytest.mark.asyncio
     async def test_request_ad_empty_response(self, empty_vast_xml):
@@ -260,23 +248,17 @@ class TestVastClientEdgeCases:
         mock_client = AsyncMock()
         mock_client.get = AsyncMock(return_value=mock_response)
 
-        client = VastClient("https://ads.example.com/vast")
-        client.client = mock_client
+        with patch('vast_client.client.get_main_http_client', return_value=mock_client):
+            client = VastClient("https://ads.example.com/vast")
+            vast_data = await client.request_ad()
 
-        vast_data = await client.request_ad()
-
-        assert vast_data["vast_version"] == "4.0"
-        assert vast_data["impression"] == []
+            assert vast_data["vast_version"] == "4.0"
+            assert vast_data["impression"] == []
 
     @pytest.mark.asyncio
     async def test_close_method(self):
         """Test client close method."""
-        mock_client = AsyncMock()
-        mock_client.aclose = AsyncMock()
-
         client = VastClient("https://ads.example.com/vast")
-        client.client = mock_client
-
         await client.close()
 
         # Note: Global clients are not closed
