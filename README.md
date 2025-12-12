@@ -953,6 +953,39 @@ vast_data = parser.parse_vast(xml_response)
 provider_id = vast_data.get("extensions", {}).get("provider_id")
 ```
 
+## Performance Benchmarks
+
+The VAST client includes comprehensive performance benchmarks for the multi-source fetching architecture. These benchmarks measure:
+
+- **Single-source vs multi-source performance** - Compare different fetching strategies
+- **Fetch strategy comparison** - PARALLEL, SEQUENTIAL, and RACE modes
+- **Fallback performance** - Cascade behavior and overhead
+- **Parse filter impact** - Filtering overhead measurement
+
+### Running Benchmarks
+
+```bash
+# Run all benchmarks
+make benchmark
+
+# Or using pytest directly
+pytest -m benchmark benchmarks/multi_source_benchmarks.py -v
+
+# Generate detailed report
+pytest -m benchmark benchmarks/multi_source_benchmarks.py::test_run_full_benchmark_suite -v
+```
+
+### Performance Targets
+
+| Metric | Target (p95) |
+|--------|--------------|
+| Single source | < 100ms |
+| Multi parallel (3 sources) | < 150ms |
+| Multi parallel (5 sources) | < 200ms |
+| Fallback overhead | < 20ms per fallback |
+
+See `benchmarks/BENCHMARKS.md` for detailed documentation and results.
+
 ## Troubleshooting
 
 ### Issue: XML Parsing Fails

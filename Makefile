@@ -1,6 +1,6 @@
 # Makefile for VAST Client tests
 
-.PHONY: help test test-unit test-integration test-iab test-all coverage clean install-dev lint format type-check
+.PHONY: help test test-unit test-integration test-iab test-all benchmark coverage clean install-dev lint format type-check
 
 # Default target
 help:
@@ -13,6 +13,7 @@ help:
 	@echo "  make test-integration  - Run integration tests only"
 	@echo "  make test-iab          - Run IAB samples tests only"
 	@echo "  make test-fast         - Run fast tests (exclude slow)"
+	@echo "  make benchmark         - Run performance benchmarks"
 	@echo "  make coverage          - Run tests with coverage report"
 	@echo "  make coverage-html     - Generate HTML coverage report"
 	@echo ""
@@ -54,6 +55,10 @@ test-fast:
 # Run all tests including slow ones
 test-all:
 	pytest -m ""
+
+# Run performance benchmarks
+benchmark:
+	pytest -m benchmark benchmarks/multi_source_benchmarks.py -v
 
 # Run tests with coverage
 coverage:
