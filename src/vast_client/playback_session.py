@@ -7,8 +7,7 @@ Supports both real-time and simulated (headless) playback modes with optional pe
 
 import json
 import uuid
-from dataclasses import dataclass, field, asdict
-from datetime import datetime
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
@@ -40,12 +39,12 @@ class PlaybackEventType(str, Enum):
 @dataclass
 class PlaybackEvent:
     """Individual playback event record."""
-    
+
     timestamp: float  # Unix timestamp
     event_type: PlaybackEventType
     offset_sec: float  # Offset from session start
     metadata: dict[str, Any] = field(default_factory=dict)
-    
+
     def to_dict(self) -> dict[str, Any]:
         """Convert event to dictionary."""
         return {
@@ -54,7 +53,7 @@ class PlaybackEvent:
             'offset_sec': self.offset_sec,
             'metadata': self.metadata,
         }
-    
+
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> 'PlaybackEvent':
         """Create event from dictionary."""
@@ -69,13 +68,13 @@ class PlaybackEvent:
 @dataclass
 class QuartileTracker:
     """Tracks which quartiles have been recorded."""
-    
+
     start: bool = False
     first_quartile: bool = False
     midpoint: bool = False
     third_quartile: bool = False
     complete: bool = False
-    
+
     def to_dict(self) -> dict[str, bool]:
         """Convert to dictionary."""
         return {
@@ -85,7 +84,7 @@ class QuartileTracker:
             'thirdQuartile': self.third_quartile,
             'complete': self.complete,
         }
-    
+
     @classmethod
     def from_dict(cls, data: dict[str, bool]) -> 'QuartileTracker':
         """Create from dictionary."""
@@ -96,7 +95,7 @@ class QuartileTracker:
             third_quartile=data.get('thirdQuartile', False),
             complete=data.get('complete', False),
         )
-    
+
     def mark_quartile(self, quartile_num: int) -> None:
         """Mark a quartile as tracked."""
         if quartile_num == 0:
@@ -109,7 +108,7 @@ class QuartileTracker:
             self.third_quartile = True
         elif quartile_num == 4:
             self.complete = True
-    
+
     def is_quartile_tracked(self, quartile_num: int) -> bool:
         """Check if a quartile has been tracked."""
         if quartile_num == 0:
@@ -129,10 +128,10 @@ class QuartileTracker:
 class PlaybackSession:
     """
     Domain object representing a single ad playback session.
-    
+
     Tracks playback progress, events, quartiles, interruptions, and metadata.
     Supports serialization for persistence and recovery.
-    
+
     Attributes:
         session_id: Unique session identifier
         ad_id: Creative/ad identifier
@@ -147,7 +146,7 @@ class PlaybackSession:
         interruption_offset_sec: Offset where interruption occurred
         metadata: Additional session metadata
     """
-    
+
     session_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     ad_id: str = ""
     duration_sec: float = 0.0
@@ -160,14 +159,14 @@ class PlaybackSession:
     interruption_type: str = ""
     interruption_offset_sec: float = 0.0
     metadata: dict[str, Any] = field(default_factory=dict)
-    
+
     logger: Any = field(default=None, init=False, repr=False)
-    
+
     def __post_init__(self):
         """Initialize logger after dataclass initialization."""
         if self.logger is None:
             self.logger = get_context_logger("playback_session")
-    
+
     def start(self, start_time: float) -> None:
         """Start the playback session."""
         if self.status != PlaybackStatus.PENDING:
@@ -177,22 +176,22 @@ class PlaybackSession:
                 current_status=self.status.value
             )
             return
-        
+
         self.status = PlaybackStatus.RUNNING
         self.start_time = start_time
         self.logger.info("Session started", session_id=self.session_id)
-    
+
     def advance(self, offset_sec: float, current_time: float) -> None:
         """Advance playback position."""
         if self.status != PlaybackStatus.RUNNING:
             return
-        
+
         self.current_offset_sec = offset_sec
-        
+
         # Check if we've reached completion
         if offset_sec >= self.duration_sec:
             self.complete(current_time)
-    
+
     def record_event(
         self,
         event_type: PlaybackEventType,
@@ -208,24 +207,24 @@ class PlaybackSession:
             metadata=metadata or {},
         )
         self.events.append(event)
-        
+
         self.logger.info(
             "Event recorded",
             session_id=self.session_id,
             event_type=event_type.value,
             offset_sec=offset_sec
         )
-        
+
         return event
-    
+
     def should_track_quartile(self, quartile_num: int) -> bool:
         """Check if a quartile should be tracked."""
         return not self.quartiles.is_quartile_tracked(quartile_num)
-    
+
     def mark_quartile_tracked(self, quartile_num: int, current_time: float) -> None:
         """Mark a quartile as tracked and record event."""
         self.quartiles.mark_quartile(quartile_num)
-        
+
         quartile_names = {
             0: "start",
             1: "firstQuartile",
@@ -233,14 +232,14 @@ class PlaybackSession:
             3: "thirdQuartile",
             4: "complete",
         }
-        
+
         self.record_event(
             PlaybackEventType.QUARTILE,
             self.current_offset_sec,
             current_time,
             metadata={'quartile': quartile_num, 'name': quartile_names.get(quartile_num, 'unknown')}
         )
-    
+
     def interrupt(
         self,
         interruption_type: str,
@@ -253,64 +252,64 @@ class PlaybackSession:
             self.end_time = current_time
             self.interruption_type = interruption_type
             self.interruption_offset_sec = offset_sec
-            
+
             self.record_event(
                 PlaybackEventType.INTERRUPT,
                 offset_sec,
                 current_time,
                 metadata={'interruption_type': interruption_type}
             )
-            
+
             self.logger.info(
                 "Session interrupted",
                 session_id=self.session_id,
                 interruption_type=interruption_type,
                 offset_sec=offset_sec
             )
-    
+
     def complete(self, current_time: float) -> None:
         """Mark session as successfully completed."""
         if self.status == PlaybackStatus.RUNNING:
             self.status = PlaybackStatus.COMPLETED
             self.end_time = current_time
             self.current_offset_sec = self.duration_sec
-            
+
             self.record_event(
                 PlaybackEventType.COMPLETE,
                 self.duration_sec,
                 current_time
             )
-            
+
             self.logger.info(
                 "Session completed",
                 session_id=self.session_id,
                 total_duration=self.duration_sec
             )
-    
+
     def error(self, error_message: str, current_time: float) -> None:
         """Mark session with error."""
         self.status = PlaybackStatus.ERROR
         self.end_time = current_time
-        
+
         self.record_event(
             PlaybackEventType.ERROR,
             self.current_offset_sec,
             current_time,
             metadata={'error': error_message}
         )
-        
+
         self.logger.error(
             "Session error",
             session_id=self.session_id,
             error=error_message
         )
-    
+
     def duration(self) -> float:
         """Get session duration in seconds."""
         if self.end_time is None:
             return 0.0
         return self.end_time - self.start_time
-    
+
     def to_dict(self) -> dict[str, Any]:
         """Serialize session to dictionary."""
         return {
@@ -327,11 +326,11 @@ class PlaybackSession:
             'interruption_offset_sec': self.interruption_offset_sec,
             'metadata': self.metadata,
         }
-    
+
     def to_json(self) -> str:
         """Serialize session to JSON string."""
         return json.dumps(self.to_dict(), default=str)
-    
+
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> 'PlaybackSession':
         """Create session from dictionary."""
@@ -350,7 +349,7 @@ class PlaybackSession:
             metadata=data.get('metadata', {}),
         )
         return session
-    
+
     @classmethod
     def from_json(cls, json_str: str) -> 'PlaybackSession':
         """Create session from JSON string."""

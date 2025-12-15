@@ -4,8 +4,13 @@ import re
 import secrets
 import time
 from typing import Any
+
 import httpx
 
+from .capabilities import has_capability, trackable_full
+from .config import VastTrackerConfig
+from .context import TrackingContext, set_tracking_context
+from .embed_http_client import EmbedHttpClient
 from .http_client_manager import (
     get_http_client_manager,
     get_tracking_http_client,
@@ -18,10 +23,6 @@ from .log_config.tracing import (
     should_propagate_to_service,
 )
 from .logging import LoggingContext, get_logging_config
-from .capabilities import has_capability, trackable_full
-from .config import VastTrackerConfig
-from .context import TrackingContext, set_tracking_context
-from .embed_http_client import EmbedHttpClient
 from .trackable import Trackable, TrackableCollection, TrackableEvent
 
 
@@ -152,7 +153,7 @@ class VastTracker:
             if hasattr(self.embed_client, "get_extra"):
                 ad_request = self.embed_client.get_extra("ad_request")
             elif hasattr(self.embed_client, "ad_request"):
-                ad_request = getattr(self.embed_client, "ad_request")
+                ad_request = self.embed_client.ad_request
 
             if isinstance(ad_request, dict):
                 auto_macros = self._build_auto_macros_from_ad_request(ad_request)
@@ -301,19 +302,19 @@ class VastTracker:
 
             # Get the list of trackable objects for this event
             trackables = self.events.get(event, [])
-            
+
             # Check if we should log debug based on configuration
             should_debug = log_config.should_log_debug(
-                operation="track_event", 
+                operation="track_event",
                 request_id=log_ctx.request_id
             )
-            
+
             if should_debug:
                 self.logger.debug(
                     "Preparing to track event",
                     **log_ctx.to_log_dict()
                 )
-            
+
             if not trackables:
                 self.logger.warning(
                     "Event not found in tracking events",
@@ -376,7 +377,7 @@ class VastTracker:
                                 success = await trackable.send_with(self.client, final_macros)
                                 results.append(success)
                                 event_info["success"] = success
-                                
+
                                 # Update result in context
                                 trackable_ctx.result["success"] = success
 
@@ -391,7 +392,7 @@ class VastTracker:
                                     operation="send_trackable",
                                     request_id=trackable_ctx.request_id
                                 )
-                                
+
                                 if success:
                                     if should_debug_trackable:
                                         self.logger.debug(
@@ -454,7 +455,7 @@ class VastTracker:
                 # Check overall success and update result in context
                 successful_count = sum(results)
                 total_count = len(trackables)
-                
+
                 # Update result namespace with aggregated metrics
                 log_ctx.result.update({
                     "success": successful_count == total_count,
@@ -630,7 +631,7 @@ class VastTracker:
         if hasattr(self.embed_client, "get_extra"):
             ad_request = self.embed_client.get_extra("ad_request")
         elif hasattr(self.embed_client, "ad_request"):
-            ad_request = getattr(self.embed_client, "ad_request")
+            ad_request = self.embed_client.ad_request
 
         if not isinstance(ad_request, dict):
             return None

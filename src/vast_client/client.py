@@ -5,23 +5,22 @@ from typing import TYPE_CHECKING, Any
 
 import httpx
 
+from .config import VastClientConfig, VastTrackerConfig
 from .events import VastEvents
 from .http_client_manager import (
-    get_http_client_manager,
     get_main_http_client,
     get_tracking_http_client,
     record_main_client_request,
 )
 from .log_config import AdRequestContext, get_context_logger
-from .routes.helpers import build_url_preserving_unicode
-from .config import VastClientConfig, VastTrackerConfig
 from .parser import VastParser
 from .player import VastPlayer
+from .routes.helpers import build_url_preserving_unicode
 from .tracker import VastTracker
 
 
 if TYPE_CHECKING:
-    from routes.helpers import EmbedHttpClient
+    from .routes.helpers import EmbedHttpClient
 
 
 class VastClient:
@@ -109,7 +108,7 @@ class VastClient:
         if client_config and isinstance(client_config, dict):
             # If client.base_url exists, use as EmbedHttpClient
             if "base_url" in client_config:
-                from routes.helpers import EmbedHttpClient
+                from .routes.helpers import EmbedHttpClient
 
                 base_url = client_config.get("base_url")
                 if base_url:  # Check that base_url is not None

@@ -1,8 +1,9 @@
 """Logging configuration and utilities."""
 
 
-import structlog
 from typing import Any
+
+import structlog
 
 
 def get_context_logger(name: str) -> structlog.BoundLogger:

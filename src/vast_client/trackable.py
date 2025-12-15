@@ -1,7 +1,7 @@
 """Trackable protocol and implementations for VAST events."""
 
-from typing import Protocol, Any, runtime_checkable
 from dataclasses import dataclass, field
+from typing import Any, Protocol, runtime_checkable
 
 
 @runtime_checkable

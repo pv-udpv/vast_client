@@ -219,7 +219,7 @@ class LoggingMixin(EventFilterMixin):
             maybe = to_dict_fn()
             if isinstance(maybe, dict):
                 base = maybe
-        
+
         # Include the URL/value in logs
         value = getattr(self, "value", None)
         if value:
@@ -229,7 +229,7 @@ class LoggingMixin(EventFilterMixin):
                 base["tracking_url"] = processed_url if isinstance(processed_url, str) else processed_url[0] if isinstance(processed_url, list) and processed_url else str(value)
             else:
                 base["tracking_url"] = value if isinstance(value, str) else value[0] if isinstance(value, list) and value else str(value)
-        
+
         stats = self.get_event_filter_stats()
         if stats["filter_active"]:
             base["_event_filters"] = stats

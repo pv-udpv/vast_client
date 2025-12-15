@@ -1,6 +1,6 @@
 """HTTP client manager for connection pooling and lifecycle management."""
 
-from typing import Any, Optional
+from typing import Any
 
 import httpx
 
@@ -17,8 +17,8 @@ class HttpClientManager:
 
     def __init__(self):
         """Initialize HTTP client manager."""
-        self._main_client: Optional[httpx.AsyncClient] = None
-        self._tracking_client: Optional[httpx.AsyncClient] = None
+        self._main_client: httpx.AsyncClient | None = None
+        self._tracking_client: httpx.AsyncClient | None = None
 
     def get_main_client(self) -> httpx.AsyncClient:
         """Get or create main HTTP client."""
@@ -79,7 +79,7 @@ def _load_http_config(kind: str) -> dict[str, Any]:
         "keepalive_expiry": _get("keepalive_expiry", 30.0 if kind == "main" else 300.0),
         # Default to verifying SSL for main client, but tracking defaults to False
         # so we can continue firing pixels even if the endpoint has a bad cert.
-        "verify": _get("verify_ssl", True if kind == "main" else False),
+        "verify": _get("verify_ssl", kind == "main"),
     }
 
 
@@ -175,9 +175,9 @@ def get_tracking_http_client(
 def record_main_client_request(
     method: str,
     url: str,
-    status_code: Optional[int] = None,
-    duration: Optional[float] = None,
-    error: Optional[str] = None,
+    status_code: int | None = None,
+    duration: float | None = None,
+    error: str | None = None,
 ) -> None:
     """Record metrics for main client request.
 
@@ -193,9 +193,9 @@ def record_main_client_request(
 
 def record_tracking_client_request(
     url: str,
-    status_code: Optional[int] = None,
-    duration: Optional[float] = None,
-    error: Optional[str] = None,
+    status_code: int | None = None,
+    duration: float | None = None,
+    error: str | None = None,
 ) -> None:
     """Record metrics for tracking client request.
 

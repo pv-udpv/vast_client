@@ -6,8 +6,8 @@ Replaces hardcoded provider factory functions with YAML-driven configuration.
 
 from typing import Any
 
-from .provider_config_loader import ProviderConfigLoader
 from .embed_http_client import EmbedHttpClient
+from .provider_config_loader import ProviderConfigLoader
 from .settings import get_settings
 
 

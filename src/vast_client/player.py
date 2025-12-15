@@ -8,11 +8,12 @@ import asyncio
 import time
 from typing import TYPE_CHECKING, Any
 
-from .events import VastEvents
 from .base_player import BaseVastPlayer
 from .config import PlaybackSessionConfig
-from .time_provider import RealtimeTimeProvider, TimeProvider
+from .events import VastEvents
 from .log_config import update_playback_progress
+from .time_provider import RealtimeTimeProvider, TimeProvider
+
 
 if TYPE_CHECKING:
     from .client import VastClient

@@ -6,21 +6,21 @@ simulated (headless) ad playback. Implements Template Method pattern with
 shared logic and abstract methods for implementation-specific behavior.
 """
 
-import asyncio
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
+from .config import PlaybackSessionConfig
 from .log_config import (
     get_context_logger,
     set_playback_context,
     update_playback_progress,
 )
-from .config import PlaybackSessionConfig
 from .playback_session import (
-    PlaybackSession,
     PlaybackEventType,
+    PlaybackSession,
 )
 from .time_provider import TimeProvider
+
 
 if TYPE_CHECKING:
     from .client import VastClient
@@ -29,24 +29,24 @@ if TYPE_CHECKING:
 class BaseVastPlayer(ABC):
     """
     Abstract base class for VAST ad players (real-time and headless).
-    
+
     Defines the unified playback interface using Template Method pattern.
     Subclasses (VastPlayer, HeadlessPlayer) implement playback-specific behavior
     while sharing common logic for progress tracking, event recording, and
     session management.
-    
+
     Architecture:
         - Template Method: play() method delegates to subclass-specific logic
         - Shared Methods: pause(), resume(), stop() work for all player types
         - Abstract Methods: _default_time_provider() for player-specific time source
         - State Management: PlaybackSession tracks all playback events
         - Lifecycle: _extract_creative_id(), _calculate_quartile() shared
-    
+
     Usage:
         Real-time player (VastPlayer):
         >>> player = VastPlayer(vast_client, ad_data)
         >>> await player.play()  # Uses RealtimeTimeProvider
-        
+
         Headless player (HeadlessPlayer):
         >>> config = PlaybackSessionConfig(mode=PlaybackMode.HEADLESS)
         >>> player = HeadlessPlayer(vast_client, ad_data, config)
@@ -229,9 +229,7 @@ class BaseVastPlayer(ABC):
             int(self.session.current_offset_sec)
         )
         progress_percent = (
-            round(
-                (self.session.current_offset_sec / self.creative_duration) * 100, 1
-            )
+            round((self.session.current_offset_sec / self.creative_duration) * 100, 1)
             if self.creative_duration > 0
             else 0.0
         )
@@ -272,9 +270,7 @@ class BaseVastPlayer(ABC):
             and self._pause_start_time is not None
             and self.session.start_time is not None
         ):
-            pause_duration = (
-                await self.time_provider.current_time()
-            ) - self._pause_start_time
+            pause_duration = (await self.time_provider.current_time()) - self._pause_start_time
             self.session.start_time += pause_duration
             self._pause_start_time = None
 
@@ -284,9 +280,7 @@ class BaseVastPlayer(ABC):
             int(self.session.current_offset_sec)
         )
         progress_percent = (
-            round(
-                (self.session.current_offset_sec / self.creative_duration) * 100, 1
-            )
+            round((self.session.current_offset_sec / self.creative_duration) * 100, 1)
             if self.creative_duration > 0
             else 0.0
         )
@@ -327,9 +321,7 @@ class BaseVastPlayer(ABC):
             int(self.session.current_offset_sec)
         )
         progress_percent = (
-            round(
-                (self.session.current_offset_sec / self.creative_duration) * 100, 1
-            )
+            round((self.session.current_offset_sec / self.creative_duration) * 100, 1)
             if self.creative_duration > 0
             else 0.0
         )
@@ -420,9 +412,7 @@ class BaseVastPlayer(ABC):
         """
         return self.session.should_track_quartile(quartile_num)
 
-    async def _record_quartile(
-        self, quartile_num: int, current_time: float, _offset_sec: float
-    ):
+    async def _record_quartile(self, quartile_num: int, current_time: float, _offset_sec: float):
         """
         Record quartile achievement.
 
@@ -450,9 +440,7 @@ class BaseVastPlayer(ABC):
             await self.vast_client.tracker.track_event(event_name)
 
         # Update context
-        quartile_percent = {0: 0.0, 1: 25.0, 2: 50.0, 3: 75.0, 4: 100.0}.get(
-            quartile_num, 0.0
-        )
+        quartile_percent = {0: 0.0, 1: 25.0, 2: 50.0, 3: 75.0, 4: 100.0}.get(quartile_num, 0.0)
 
         update_playback_progress(
             playback_seconds=int(self.session.duration()),

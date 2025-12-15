@@ -5,12 +5,11 @@ Loads and processes YAML-based provider configurations,
 supporting template variable resolution and context preparation.
 """
 
+import hashlib
 import re
 import secrets
-import hashlib
 import uuid
 from typing import Any
-from pathlib import Path
 
 from .settings import get_settings
 

@@ -18,6 +18,7 @@ from .config import PlaybackMode, PlaybackSessionConfig
 from .headless_player import HeadlessPlayer
 from .player import VastPlayer
 
+
 if TYPE_CHECKING:
     from .client import VastClient
 
@@ -25,12 +26,12 @@ if TYPE_CHECKING:
 class PlayerFactory:
     """
     Factory for creating appropriate VAST player instances.
-    
+
     The factory supports three modes of operation:
     1. Explicit mode selection (REAL or HEADLESS)
     2. Automatic mode detection (AUTO)
     3. Environment-based defaults
-    
+
     Examples:
         Create real-time player explicitly:
         >>> factory = PlayerFactory()
@@ -43,7 +44,7 @@ class PlayerFactory:
         ... )
         >>> isinstance(player, VastPlayer)
         True
-        
+
         Create headless player for testing:
         >>> factory = PlayerFactory()
         >>> config = PlaybackSessionConfig(mode=PlaybackMode.HEADLESS)
@@ -55,7 +56,7 @@ class PlayerFactory:
         ... )
         >>> isinstance(player, HeadlessPlayer)
         True
-        
+
         Auto-detect from environment:
         >>> factory = PlayerFactory()
         >>> config = PlaybackSessionConfig(mode=PlaybackMode.AUTO)
@@ -68,7 +69,7 @@ class PlayerFactory:
         >>> # Returns HeadlessPlayer in CI/test environments
         >>> # Returns VastPlayer in production environments
     """
-    
+
     @staticmethod
     def create(
         vast_client: "VastClient",
@@ -78,16 +79,16 @@ class PlayerFactory:
     ) -> BaseVastPlayer:
         """
         Create appropriate player instance based on configuration.
-        
+
         Args:
             vast_client: VastClient instance for tracking
             creative_id: Unique creative identifier
             ad_data: VAST ad data dictionary
             config: Playback configuration (defaults to REAL mode if None)
-        
+
         Returns:
             BaseVastPlayer: Either VastPlayer or HeadlessPlayer instance
-            
+
         Mode Resolution:
             - If config.mode == REAL: Always returns VastPlayer
             - If config.mode == HEADLESS: Always returns HeadlessPlayer
@@ -96,7 +97,7 @@ class PlayerFactory:
                 * Testing environment (PYTEST_CURRENT_TEST set)
                 * Headless environment (DISPLAY not set on Linux)
               Otherwise returns VastPlayer
-        
+
         Examples:
             Real-time production playback:
             >>> player = PlayerFactory.create(
@@ -105,7 +106,7 @@ class PlayerFactory:
             ...     ad_data=vast_response,
             ...     config=PlaybackSessionConfig(mode=PlaybackMode.REAL)
             ... )
-            
+
             Headless testing:
             >>> player = PlayerFactory.create(
             ...     vast_client=client,
@@ -113,7 +114,7 @@ class PlayerFactory:
             ...     ad_data=vast_response,
             ...     config=PlaybackSessionConfig(mode=PlaybackMode.HEADLESS)
             ... )
-            
+
             Auto-detection:
             >>> player = PlayerFactory.create(
             ...     vast_client=client,
@@ -125,12 +126,12 @@ class PlayerFactory:
         # Default to REAL mode if no config provided
         if config is None:
             config = PlaybackSessionConfig(mode=PlaybackMode.REAL)
-        
+
         # Determine effective mode
         mode = config.mode
         if mode == PlaybackMode.AUTO:
             mode = PlayerFactory._detect_mode_from_environment()
-        
+
         # Create appropriate player
         if mode == PlaybackMode.HEADLESS:
             return HeadlessPlayer(
@@ -146,7 +147,7 @@ class PlayerFactory:
                 ad_data=ad_data,
                 config=config,
             )
-    
+
     @staticmethod
     def create_real(
         vast_client: "VastClient",
@@ -156,16 +157,16 @@ class PlayerFactory:
     ) -> VastPlayer:
         """
         Create a real-time VastPlayer instance explicitly.
-        
+
         Args:
             vast_client: VastClient instance for tracking
             creative_id: Unique creative identifier
             ad_data: VAST ad data dictionary
             config: Playback configuration (mode will be set to REAL)
-        
+
         Returns:
             VastPlayer: Real-time player instance
-        
+
         Examples:
             >>> player = PlayerFactory.create_real(
             ...     vast_client=client,
@@ -180,14 +181,14 @@ class PlayerFactory:
         else:
             # Ensure mode is REAL
             config.mode = PlaybackMode.REAL
-        
+
         return VastPlayer(
             vast_client=vast_client,
             creative_id=creative_id,
             ad_data=ad_data,
             config=config,
         )
-    
+
     @staticmethod
     def create_headless(
         vast_client: "VastClient",
@@ -197,16 +198,16 @@ class PlayerFactory:
     ) -> HeadlessPlayer:
         """
         Create a HeadlessPlayer instance explicitly for testing/simulation.
-        
+
         Args:
             vast_client: VastClient instance for tracking
             creative_id: Unique creative identifier
             ad_data: VAST ad data dictionary
             config: Playback configuration (mode will be set to HEADLESS)
-        
+
         Returns:
             HeadlessPlayer: Simulated player instance
-        
+
         Examples:
             >>> player = PlayerFactory.create_headless(
             ...     vast_client=client,
@@ -227,19 +228,19 @@ class PlayerFactory:
         else:
             # Ensure mode is HEADLESS
             config.mode = PlaybackMode.HEADLESS
-        
+
         return HeadlessPlayer(
             vast_client=vast_client,
             creative_id=creative_id,
             ad_data=ad_data,
             config=config,
         )
-    
+
     @staticmethod
     def _detect_mode_from_environment() -> PlaybackMode:
         """
         Detect appropriate playback mode from environment variables.
-        
+
         Detection Logic:
             Returns HEADLESS if any of the following are true:
             1. CI environment detected:
@@ -255,18 +256,18 @@ class PlayerFactory:
                - TEST_MODE=true
             3. Headless environment (Linux only):
                - DISPLAY is not set
-            
+
             Returns REAL for all other cases (production default)
-        
+
         Returns:
             PlaybackMode: Either HEADLESS or REAL
-        
+
         Examples:
             >>> # In CI environment
             >>> os.environ['CI'] = 'true'
             >>> PlayerFactory._detect_mode_from_environment()
             <PlaybackMode.HEADLESS: 'headless'>
-            
+
             >>> # In production
             >>> os.environ.clear()
             >>> PlayerFactory._detect_mode_from_environment()
@@ -281,38 +282,38 @@ class PlayerFactory:
             "TRAVIS",            # Travis CI
             "CIRCLECI",          # CircleCI
         ]
-        
+
         for indicator in ci_indicators:
             if os.getenv(indicator):
                 return PlaybackMode.HEADLESS
-        
+
         # Check for testing environment
         test_indicators = [
             "PYTEST_CURRENT_TEST",  # pytest running
             "TESTING",              # Generic test flag
             "TEST_MODE",            # Alternative test flag
         ]
-        
+
         for indicator in test_indicators:
             if os.getenv(indicator):
                 return PlaybackMode.HEADLESS
-        
+
         # Check for headless environment (Linux only)
         # DISPLAY not set usually indicates headless server
         if os.name == "posix" and not os.getenv("DISPLAY"):
             return PlaybackMode.HEADLESS
-        
+
         # Default to real-time for production
         return PlaybackMode.REAL
-    
+
     @staticmethod
     def is_headless_environment() -> bool:
         """
         Check if current environment is headless (useful for conditional logic).
-        
+
         Returns:
             bool: True if headless environment detected, False otherwise
-        
+
         Examples:
             >>> if PlayerFactory.is_headless_environment():
             ...     print("Running in CI or headless environment")
@@ -331,18 +332,18 @@ def create_player(
 ) -> BaseVastPlayer:
     """
     Convenience function for creating VAST players.
-    
+
     Delegates to PlayerFactory.create().
-    
+
     Args:
         vast_client: VastClient instance for tracking
         creative_id: Unique creative identifier
         ad_data: VAST ad data dictionary
         config: Playback configuration
-    
+
     Returns:
         BaseVastPlayer: Appropriate player instance
-    
+
     Examples:
         >>> player = create_player(client, "creative-123", vast_response)
         >>> await player.setup_time_provider()
@@ -359,18 +360,18 @@ def create_real_player(
 ) -> VastPlayer:
     """
     Convenience function for creating real-time VAST players.
-    
+
     Delegates to PlayerFactory.create_real().
-    
+
     Args:
         vast_client: VastClient instance for tracking
         creative_id: Unique creative identifier
         ad_data: VAST ad data dictionary
         config: Playback configuration
-    
+
     Returns:
         VastPlayer: Real-time player instance
-    
+
     Examples:
         >>> player = create_real_player(client, "creative-123", vast_response)
         >>> await player.setup_time_provider()
@@ -387,18 +388,18 @@ def create_headless_player(
 ) -> HeadlessPlayer:
     """
     Convenience function for creating headless VAST players for testing.
-    
+
     Delegates to PlayerFactory.create_headless().
-    
+
     Args:
         vast_client: VastClient instance for tracking
         creative_id: Unique creative identifier
         ad_data: VAST ad data dictionary
         config: Playback configuration
-    
+
     Returns:
         HeadlessPlayer: Simulated player instance
-    
+
     Examples:
         >>> player = create_headless_player(client, "creative-123", vast_response)
         >>> await player.setup_time_provider()

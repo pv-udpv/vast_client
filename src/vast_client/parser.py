@@ -148,7 +148,7 @@ class VastParser:
         Raises:
             VastXMLError: If XML parsing fails or required fields are missing
         """
-        from .config import XPathSpec, ExtractMode
+        from .config import ExtractMode
 
         self.logger.debug(
             VastEvents.PARSE_STARTED, xml_length=len(xml_string), specs_count=len(xpath_specs)

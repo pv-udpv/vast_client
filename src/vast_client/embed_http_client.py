@@ -7,7 +7,7 @@ and headers into a single reusable client instance.
 
 import json
 from typing import Any
-from urllib.parse import urlencode, quote
+from urllib.parse import quote
 
 
 class EmbedHttpClient:

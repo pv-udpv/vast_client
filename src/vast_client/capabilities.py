@@ -497,7 +497,7 @@ def with_metrics_contextual(cls: type[T]) -> type[T]:
         elif hasattr(metrics, "gauge"):
             metrics.gauge(metric_name, value, tags=tags or {})
 
-    cls.record_metric = record_metric
+    setattr(cls, "record_metric", record_metric)
 
     _add_capability(cls, "metrics")
 

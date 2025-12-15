@@ -8,11 +8,12 @@ Inherits shared playback logic from BaseVastPlayer.
 import random
 from typing import TYPE_CHECKING, Any
 
-from .log_config import update_playback_progress
 from .base_player import BaseVastPlayer
 from .config import PlaybackSessionConfig
+from .log_config import update_playback_progress
 from .playback_session import PlaybackEventType
 from .time_provider import SimulatedTimeProvider, TimeProvider
+
 
 if TYPE_CHECKING:
     from .client import VastClient

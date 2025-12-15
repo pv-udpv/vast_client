@@ -1,9 +1,11 @@
 """Dependency injection context for tracking capabilities."""
 
-from typing import Any, TypeVar
 from dataclasses import dataclass, field
+from typing import Any, TypeVar
+
 import httpx
 from structlog import BoundLogger
+
 
 T = TypeVar('T')
 

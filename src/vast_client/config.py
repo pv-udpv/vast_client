@@ -5,12 +5,13 @@ Provides configuration classes for all VAST client components,
 enabling provider-specific customization and publisher overrides.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Literal
+from typing import Any
 
-from .settings import get_settings
 from .context import TrackingContext
+from .settings import get_settings
 
 
 class ExtractMode(str, Enum):
@@ -234,7 +235,7 @@ class VastTrackerConfig:
     )
     """
     Default capabilities to apply to trackables.
-    
+
     Available capabilities:
     - 'macros': Macro replacement functionality
     - 'state': State management (StateMixin)
@@ -313,12 +314,12 @@ class VastTrackerConfig:
             ...     MyTrackable = decorator(MyTrackable)
         """
         from .capabilities import (
-            with_macros,
-            with_state,
-            with_logging_contextual,
             with_http_send_contextual,
+            with_logging_contextual,
+            with_macros,
             with_metrics_contextual,
             with_retry_logic_contextual,
+            with_state,
         )
 
         capability_map = {

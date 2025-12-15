@@ -125,7 +125,7 @@ http:
   keepalive_expiry: 30.0
   # Tracking client overrides
   tracking:
-    verify_ssl: false
+    verify_ssl: true
     keepalive_expiry: 300.0
   
   # Default headers - supports ${ad_request.property} substitution
