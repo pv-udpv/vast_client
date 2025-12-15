@@ -7,10 +7,17 @@ enabling provider-specific customization and publisher overrides.
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable
+from typing import Any, Callable, Literal
 
 from .settings import get_settings
 from .context import TrackingContext
+
+
+class ExtractMode(str, Enum):
+    """XPath extraction mode enumeration."""
+
+    SINGLE = "single"  # Extract first match only
+    LIST = "list"  # Extract all matches as list
 
 
 class PlaybackMode(str, Enum):
@@ -327,6 +334,46 @@ class VastTrackerConfig:
 
 
 @dataclass
+class XPathSpec:
+    """XPath specification with callback processing for multi-chain parsing.
+
+    Defines how to extract data from VAST XML using XPath expressions,
+    with support for callback functions to process the extracted data.
+
+    Attributes:
+        xpath: XPath expression to match elements
+        name: Field name in the result dictionary
+        callback: Function to process extracted data
+        mode: Extraction mode - 'single' (first match) or 'list' (all matches)
+        required: Whether this extraction is required (fail if not found)
+
+    Examples:
+        Basic extraction with processing:
+        >>> spec = XPathSpec(
+        ...     xpath=".//Impression",
+        ...     name="impressions",
+        ...     callback=lambda urls: [url.strip() for url in urls if url],
+        ...     mode=ExtractMode.LIST
+        ... )
+
+        Single value extraction with validation:
+        >>> spec = XPathSpec(
+        ...     xpath=".//Duration",
+        ...     name="duration_seconds",
+        ...     callback=lambda d: int(float(d)) if d else None,
+        ...     mode=ExtractMode.SINGLE,
+        ...     required=True
+        ... )
+    """
+
+    xpath: str
+    name: str
+    callback: Callable[[Any], Any] | None = None
+    mode: ExtractMode = ExtractMode.LIST
+    required: bool = False
+
+
+@dataclass
 class VastClientConfig:
     """Complete VAST client configuration."""
 
@@ -623,11 +670,13 @@ def get_vast_config_from_settings() -> VastClientConfig:
 
 
 __all__ = [
+    "ExtractMode",
     "PlaybackMode",
     "InterruptionType",
     "VastParserConfig",
     "PlaybackSessionConfig",
     "VastTrackerConfig",
+    "XPathSpec",
     "VastClientConfig",
     "get_default_vast_config",
     "get_vast_config_with_publisher_overrides",

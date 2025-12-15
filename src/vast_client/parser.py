@@ -23,6 +23,7 @@ class VastParser:
         # Initialize config
         if config is None:
             from .config import VastParserConfig
+
             self.config = VastParserConfig()
         else:
             self.config = config
@@ -45,26 +46,21 @@ class VastParser:
             # lxml parsing with configurable encoding and recovery
             if isinstance(xml_string, str):
                 parser = etree.XMLParser(
-                    recover=self.config.recover_on_error,
-                    encoding=self.config.encoding
+                    recover=self.config.recover_on_error, encoding=self.config.encoding
                 )
                 root = etree.fromstring(xml_string.encode(self.config.encoding), parser=parser)  # ruff: noqa: S320
             else:
                 root = etree.fromstring(xml_string)  # ruff: noqa: S320
             self.logger.debug("XML parsed successfully", root_tag=root.tag)
         except etree.XMLSyntaxError as e:
-            self.logger.error(
-                VastEvents.PARSE_FAILED, error=str(e), xml_preview=xml_string[:200]
-            )
+            self.logger.error(VastEvents.PARSE_FAILED, error=str(e), xml_preview=xml_string[:200])
             raise VastXMLError(
                 f"Failed to parse VAST XML: {str(e)}",
                 xml_preview=xml_string[:200],
                 parser_error=e,
             ) from e
         except (UnicodeDecodeError, ValueError) as e:
-            self.logger.error(
-                VastEvents.PARSE_FAILED, error=str(e), xml_preview=xml_string[:200]
-            )
+            self.logger.error(VastEvents.PARSE_FAILED, error=str(e), xml_preview=xml_string[:200])
             raise VastXMLError(
                 f"Failed to decode or parse VAST XML: {str(e)}",
                 xml_preview=xml_string[:200],
@@ -100,12 +96,8 @@ class VastParser:
             "error": [err.text for err in error_elems if err.text],
             "creative": (
                 {
-                    "id": (
-                        creative_elem.get("id") if creative_elem is not None else None
-                    ),
-                    "ad_id": (
-                        creative_elem.get("adId") if creative_elem is not None else None
-                    ),
+                    "id": (creative_elem.get("id") if creative_elem is not None else None),
+                    "ad_id": (creative_elem.get("adId") if creative_elem is not None else None),
                 }
                 if creative_elem is not None
                 else {}
@@ -122,9 +114,7 @@ class VastParser:
                 for media in media_files
                 if media.text
             ],
-            "media_url": (
-                media_files[0].text if media_files and media_files[0].text else None
-            ),
+            "media_url": (media_files[0].text if media_files and media_files[0].text else None),
             "tracking_events": {
                 event.get("event"): [event.text]
                 for event in tracking_events
@@ -144,6 +134,175 @@ class VastParser:
             duration=vast_data.get("duration"),
         )
         return vast_data
+
+    def parse_with_specs(self, xml_string: str, xpath_specs: list) -> dict[str, Any]:
+        """Parse VAST XML using XPath specifications with callback processing.
+
+        Args:
+            xml_string: Raw VAST XML string
+            xpath_specs: List of XPathSpec objects defining extraction rules
+
+        Returns:
+            Dictionary with extracted and processed data
+
+        Raises:
+            VastXMLError: If XML parsing fails or required fields are missing
+        """
+        from .config import XPathSpec, ExtractMode
+
+        self.logger.debug(
+            VastEvents.PARSE_STARTED, xml_length=len(xml_string), specs_count=len(xpath_specs)
+        )
+
+        # Parse XML once
+        try:
+            if isinstance(xml_string, str):
+                parser = etree.XMLParser(
+                    recover=self.config.recover_on_error, encoding=self.config.encoding
+                )
+                root = etree.fromstring(xml_string.encode(self.config.encoding), parser=parser)  # ruff: noqa: S320
+            else:
+                root = etree.fromstring(xml_string)  # ruff: noqa: S320
+            self.logger.debug(
+                "XML parsed successfully for spec-based extraction", root_tag=root.tag
+            )
+        except etree.XMLSyntaxError as e:
+            self.logger.error(VastEvents.PARSE_FAILED, error=str(e), xml_preview=xml_string[:200])
+            raise VastXMLError(
+                f"Failed to parse VAST XML: {str(e)}",
+                xml_preview=xml_string[:200],
+                parser_error=e,
+            ) from e
+        except (UnicodeDecodeError, ValueError) as e:
+            self.logger.error(VastEvents.PARSE_FAILED, error=str(e), xml_preview=xml_string[:200])
+            raise VastXMLError(
+                f"Failed to decode or parse VAST XML: {str(e)}",
+                xml_preview=xml_string[:200],
+                parser_error=e,
+            ) from e
+
+        # Process each XPath specification
+        result = {}
+        processed_specs = 0
+
+        for spec in xpath_specs:
+            try:
+                self.logger.debug(
+                    "Processing XPath spec",
+                    name=spec.name,
+                    xpath=spec.xpath,
+                    mode=spec.mode.value,
+                    has_callback=spec.callback is not None,
+                    required=spec.required,
+                )
+
+                # Extract elements based on mode
+                if spec.mode == ExtractMode.SINGLE:
+                    elem = root.find(spec.xpath)
+                    value = elem.text if elem is not None else None
+                    if spec.mode == ExtractMode.SINGLE and elem is None:
+                        extracted_count = 0
+                    else:
+                        extracted_count = 1 if elem is not None else 0
+                else:  # ExtractMode.LIST
+                    elems = root.findall(spec.xpath)
+                    value = [elem.text for elem in elems if elem is not None and elem.text]
+                    extracted_count = len(value)
+
+                self.logger.debug(
+                    "XPath extraction completed",
+                    name=spec.name,
+                    extracted_count=extracted_count,
+                    has_value=value is not None
+                    and (len(value) > 0 if isinstance(value, list) else True),
+                )
+
+                # Apply callback if provided
+                if spec.callback and value is not None:
+                    try:
+                        original_value = value
+                        value = spec.callback(value)
+                        self.logger.debug(
+                            "Callback applied successfully",
+                            name=spec.name,
+                            original_type=type(original_value).__name__,
+                            result_type=type(value).__name__,
+                        )
+                    except Exception as e:
+                        self.logger.error(
+                            "Callback failed for XPath spec",
+                            name=spec.name,
+                            error=str(e),
+                            xpath=spec.xpath,
+                        )
+                        if spec.required:
+                            raise VastXMLError(
+                                f"Required callback failed for field '{spec.name}': {str(e)}",
+                                context={
+                                    "xpath": spec.xpath,
+                                    "spec_name": spec.name,
+                                    "callback_error": str(e),
+                                },
+                            ) from e
+                        # For optional specs, continue with original value
+                        value = original_value
+
+                # Check required fields
+                if spec.required:
+                    if spec.mode == ExtractMode.SINGLE and value is None:
+                        raise VastXMLError(
+                            f"Required field '{spec.name}' not found",
+                            context={
+                                "xpath": spec.xpath,
+                                "spec_name": spec.name,
+                            },
+                        )
+                    elif spec.mode == ExtractMode.LIST and (value is None or len(value) == 0):
+                        raise VastXMLError(
+                            f"Required field '{spec.name}' has no values",
+                            context={
+                                "xpath": spec.xpath,
+                                "spec_name": spec.name,
+                            },
+                        )
+
+                result[spec.name] = value
+                processed_specs += 1
+
+                self.logger.debug(
+                    "XPath spec processed successfully",
+                    name=spec.name,
+                    processed_specs=processed_specs,
+                    total_specs=len(xpath_specs),
+                )
+
+            except VastXMLError:
+                # Re-raise required field errors
+                raise
+            except Exception as e:
+                self.logger.error(
+                    "Failed to process XPath spec", name=spec.name, xpath=spec.xpath, error=str(e)
+                )
+                if spec.required:
+                    raise VastXMLError(
+                        f"Failed to process required field '{spec.name}': {str(e)}",
+                        context={
+                            "xpath": spec.xpath,
+                            "spec_name": spec.name,
+                            "processing_error": str(e),
+                        },
+                    ) from e
+                # For optional specs, set to None and continue
+                result[spec.name] = None
+                processed_specs += 1
+
+        self.logger.info(
+            "Spec-based parsing completed",
+            processed_specs=processed_specs,
+            total_specs=len(xpath_specs),
+            result_keys=list(result.keys()),
+        )
+        return result
 
     def parse_extensions(self, root: etree._Element) -> dict[str, Any]:
         """Parse VAST extensions from XML root element.
@@ -184,13 +343,11 @@ class VastParser:
                 try:
                     custom_elems = root.findall(xpath)
                     if custom_elems:
-                        extensions[field_name] = [
-                            elem.text for elem in custom_elems if elem.text
-                        ]
+                        extensions[field_name] = [elem.text for elem in custom_elems if elem.text]
                         self.logger.debug(
                             "Parsed custom field",
                             field_name=field_name,
-                            values_count=len(extensions[field_name])
+                            values_count=len(extensions[field_name]),
                         )
                 except ValueError as e:
                     self.logger.warning(
@@ -215,9 +372,7 @@ class VastParser:
             )
             # Return partial results - extensions are not critical
 
-        self.logger.debug(
-            "Extensions parsing completed", extensions_count=len(extensions)
-        )
+        self.logger.debug("Extensions parsing completed", extensions_count=len(extensions))
         return extensions
 
     def parse_duration(self, root: etree._Element) -> int | None:
@@ -237,9 +392,7 @@ class VastParser:
             duration_elem = root.find(self.config.xpath_duration)
 
             if duration_elem is not None and duration_elem.text:
-                self.logger.debug(
-                    "Found duration element", duration_text=duration_elem.text
-                )
+                self.logger.debug("Found duration element", duration_text=duration_elem.text)
                 return self._parse_duration_string(duration_elem.text)
             self.logger.debug("No duration element found")
             return None
@@ -283,9 +436,7 @@ class VastParser:
                 + int(float(duration_parts[1])) * 60
                 + int(float(duration_parts[2]))
             )
-            self.logger.debug(
-                "Duration parsed successfully", duration_seconds=duration
-            )
+            self.logger.debug("Duration parsed successfully", duration_seconds=duration)
             return duration
         except ValueError as e:
             raise VastDurationError(
@@ -355,6 +506,7 @@ class VastParser:
             VastParser: Configured parser instance
         """
         from .config import VastParserConfig
+
         parser_config = VastParserConfig(**config)
         return cls(config=parser_config)
 

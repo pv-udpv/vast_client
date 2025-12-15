@@ -44,13 +44,16 @@ class VastClient:
         Args:
             config_or_url: URL string, configuration dictionary, or VastClientConfig
             ctx: Request context (ad_request)
-            **kwargs: Additional parameters (client, parser, tracker, ssl_verify, etc.)
+            **kwargs: Additional parameters (parser, tracker, ssl_verify, xpath_specs, etc.)
         """
         # Ad request context (priority: ctx, then ad_request from kwargs)
         self.ad_request = ctx or kwargs.get("ad_request", {})
 
         # SSL verification setting
         self.ssl_verify = kwargs.get("ssl_verify", True)
+
+        # XPath specifications for parsing (optional)
+        self.xpath_specs = kwargs.get("xpath_specs", [])
 
         # Initialize contextual logger - automatically picks up context variables
         self.logger = get_context_logger("vast_client")
@@ -379,46 +382,54 @@ class VastClient:
 
             if is_xml_content or starts_with_xml:
                 self.logger.info("Detected XML response, attempting VAST parsing")
-                try:
-                    vast_data = self.parser.parse_vast(response_text)
 
-                    # Preserve raw VAST XML response
-                    vast_data["_raw_vast_response"] = response_text
+                # Handle VAST wrapper resolution automatically
+                vast_data = await self._resolve_vast_response(response_text)
 
-                    # Create tracker if there are events to track
-                    tracking_events: dict[str, list[str]] = vast_data.get("tracking_events", {})
-                    tracking_events.update({"impression": vast_data.get("impression", [])})
-                    tracking_events.update({"error": vast_data.get("error", [])})
-
-                    if tracking_events:
-                        # Extract creative_id from vast_data
-                        creative_data = vast_data.get("creative", {})
-                        creative_id = creative_data.get("id") or creative_data.get("ad_id")
-
-                        self.logger.info(
-                            "Creating VastTracker",
-                            tracking_events_count=len(tracking_events),
-                            creative_id=creative_id,
+                # Use xpath_specs if provided, otherwise use standard parsing
+                if self.xpath_specs:
+                    self.logger.info("Using xpath_specs for custom parsing")
+                    try:
+                        vast_data = self.parser.parse_with_specs(
+                            vast_data["_raw_vast_response"], self.xpath_specs
                         )
-                        # Use separate client for tracking
-                        tracking_client = get_tracking_http_client()
-                        self.tracker = VastTracker(
-                            tracking_events,
-                            tracking_client,
-                            self.embed_client,  # Use embed_client instead of ad_request
-                            creative_id,
+                        # Re-preserve raw response after xpath parsing
+                        vast_data["_raw_vast_response"] = response_text
+                    except Exception as e:
+                        self.logger.warning(
+                            "Failed to parse with xpath_specs, using standard parsing",
+                            error=str(e),
+                            error_type=type(e).__name__,
                         )
-                    else:
-                        self.logger.debug("No tracking events found, skipping tracker creation")
+                        # vast_data already contains standard parsing result
 
-                    return vast_data
-                except Exception as e:
-                    self.logger.warning(
-                        "Failed to parse as VAST XML, returning raw response",
-                        error=str(e),
-                        error_type=type(e).__name__,
+                # Create tracker if there are events to track
+                tracking_events: dict[str, list[str]] = vast_data.get("tracking_events", {})
+                tracking_events.update({"impression": vast_data.get("impression", [])})
+                tracking_events.update({"error": vast_data.get("error", [])})
+
+                if tracking_events:
+                    # Extract creative_id from vast_data
+                    creative_data = vast_data.get("creative", {})
+                    creative_id = creative_data.get("id") or creative_data.get("ad_id")
+
+                    self.logger.info(
+                        "Creating VastTracker",
+                        tracking_events_count=len(tracking_events),
+                        creative_id=creative_id,
                     )
-                    return response_text
+                    # Use separate client for tracking
+                    tracking_client = get_tracking_http_client()
+                    self.tracker = VastTracker(
+                        tracking_events,
+                        tracking_client,
+                        self.embed_client,  # Use embed_client instead of ad_request
+                        creative_id,
+                    )
+                else:
+                    self.logger.debug("No tracking events found, skipping tracker creation")
+
+                return vast_data
             else:
                 self.logger.info("Non-XML response detected, returning raw content")
                 return response_text
@@ -439,6 +450,93 @@ class VastClient:
             # Record request metric
             response_time = time.time() - start_time
             record_main_client_request(success, response_time, error_type, info_type)
+
+    async def _resolve_vast_response(self, vast_xml: str) -> dict[str, Any]:
+        """
+        Resolve VAST wrappers automatically, following the chain until reaching InLine ad.
+
+        Args:
+            vast_xml: Raw VAST XML response
+
+        Returns:
+            Parsed VAST data with wrapper resolution applied
+        """
+        current_xml = vast_xml
+        wrapper_depth = 0
+        max_wrapper_depth = 5  # Prevent infinite loops
+
+        while wrapper_depth < max_wrapper_depth:
+            try:
+                # Parse current VAST response
+                vast_data = self.parser.parse_vast(current_xml)
+                vast_data["_raw_vast_response"] = current_xml
+
+                # Check if this is a wrapper
+                ad_data = vast_data.get("ad", {})
+                if ad_data.get("type") == "wrapper":
+                    self.logger.info(
+                        "Detected VAST wrapper, following chain",
+                        wrapper_depth=wrapper_depth + 1,
+                        wrapper_url=ad_data.get("vast_url"),
+                    )
+
+                    wrapper_depth += 1
+
+                    # Get wrapper URL
+                    wrapper_url = ad_data.get("vast_url")
+                    if not wrapper_url:
+                        self.logger.warning("Wrapper detected but no VAST URL found")
+                        break
+
+                    # Fetch wrapped VAST
+                    http_client = get_main_http_client(ssl_verify=self.ssl_verify)
+                    wrapper_response = await http_client.get(wrapper_url)
+                    wrapper_response.raise_for_status()
+
+                    current_xml = wrapper_response.text
+                    continue
+                else:
+                    # This is an InLine ad or non-wrapper response
+                    self.logger.debug(
+                        "Reached InLine ad or non-wrapper response",
+                        ad_type=ad_data.get("type"),
+                        wrapper_depth=wrapper_depth,
+                    )
+                    break
+
+            except Exception as e:
+                self.logger.warning(
+                    "Failed to parse VAST during wrapper resolution",
+                    error=str(e),
+                    wrapper_depth=wrapper_depth,
+                )
+                # Return the last successfully parsed data or re-raise
+                if wrapper_depth > 0:
+                    vast_data["_wrapper_resolution_failed"] = True
+                    return vast_data
+                else:
+                    raise
+
+        if wrapper_depth >= max_wrapper_depth:
+            self.logger.warning(
+                "Maximum wrapper depth exceeded",
+                max_depth=max_wrapper_depth,
+                final_wrapper_depth=wrapper_depth,
+            )
+
+        return vast_data
+
+    async def track_event(self, event: str, macros: dict[str, str] | None = None):
+        """Track a VAST event.
+
+        Args:
+            event: Event name to track (e.g., "impression", "firstQuartile")
+            macros: Additional macros for URL substitution
+        """
+        if self.tracker:
+            await self.tracker.track_event(event, macros)
+        else:
+            self.logger.warning("No tracker available for event tracking", event=event)
 
     async def play_ad(self, ad_data: dict[str, Any]):
         """Play ad using VastPlayer.

@@ -7,26 +7,31 @@ The **VAST Client** package is a comprehensive, production-ready implementation 
 ### Key Features
 
 ✨ **Full VAST Protocol Support**
+
 - Compliant VAST 2.0, 3.0, and 4.0 parsing
 - Flexible XML parsing with error recovery
 - Support for inline ads and ad pods
 
 🎯 **Advanced Tracking System**
+
 - Event-based tracking with macro substitution
 - Flexible tracking state management
 - Retry mechanisms with configurable policies
 
 ▶️ **Playback Management**
+
 - Progress tracking with quartile events
 - Real-time playback state management
 - Intelligent interruption handling
 
 🔗 **HTTP Client Integration**
+
 - Modular HTTP client architecture
 - Context-aware request handling
 - Connection pooling and timeout management
 
 📊 **Extensibility & Capabilities**
+
 - Mixin-based capability system
 - Dependency injection support
 - Custom macro processing
@@ -111,6 +116,7 @@ from vast_client.embed_http_client import EmbedHttpClient
 # Create tracker with tracking events
 tracking_events = {
     "impression": ["https://tracking.example.com/impression"],
+    "error": ["http:..."],
     "start": ["https://tracking.example.com/start"],
     "midpoint": ["https://tracking.example.com/midpoint"],
 }
@@ -128,6 +134,78 @@ await tracker.track_event("start")
 await tracker.track_event("midpoint", macros={"duration": "30"})
 ```
 
+#### 5. Custom XPath Parsing
+
+```python
+from vast_client import VastClient
+from vast_client.config import XPathSpec, ExtractMode
+
+# Define XPath specifications with callback functions
+xpath_specs = [
+    XPathSpec(
+        xpath=".//Impression",
+        name="tracking_events",
+        callback=lambda urls: {"impression": urls} if urls else {},
+        mode=ExtractMode.LIST
+    ),
+    XPathSpec(
+        xpath=".//Duration",
+        name="duration_seconds",
+        callback=lambda d: int(float(d)) if d else None,
+        mode=ExtractMode.SINGLE
+    ),
+    XPathSpec(
+        xpath=".//Extensions/ProviderData/ID",
+        name="provider_id",
+        callback=lambda id: int(id) if id and id.isdigit() else None,
+        mode=ExtractMode.SINGLE,
+        required=False
+    )
+]
+
+# Create client with xpath_specs
+client = VastClient(
+    "https://ads.example.com/vast",
+    ctx=ad_request,
+    xpath_specs=xpath_specs
+)
+
+# Request ad - automatically applies xpath_specs parsing
+results = await client.request_ad()
+
+# Access parsed results
+impressions = results["tracking_events"]
+duration = results["duration_seconds"]
+provider_id = results["provider_id"]
+
+# Track events (no chain_id needed)
+await client.track_event("impression")
+await client.track_event("start")
+```
+
+#### 6. Wrapper Resolution (Automatic)
+
+VAST wrapper ads are automatically resolved to their inline content:
+
+```python
+from vast_client import VastClient
+
+# Wrapper resolution happens automatically - no special configuration needed
+client = VastClient("https://ads.example.com/vast", ctx=ad_request)
+
+# Request ad - client automatically follows wrapper chains up to 5 levels deep
+ad_data = await client.request_ad()
+
+# Result contains the final inline ad data
+print(f"Ad Title: {ad_data.get('ad_title')}")
+print(f"Duration: {ad_data.get('duration')}s")
+print(f"Media URL: {ad_data.get('media_url')}")
+
+# If wrapper resolution failed, check the flag
+if ad_data.get("_wrapper_resolution_failed"):
+    print("Wrapper resolution failed - returned partial data")
+```
+
 ## Core Components
 
 ### VastClient
@@ -135,8 +213,11 @@ await tracker.track_event("midpoint", macros={"duration": "30"})
 The main facade for VAST operations. Supports multiple initialization patterns.
 
 **Features:**
+
 - Flexible configuration (URL string, dict, VastClientConfig)
 - Automatic HTTP client management
+- **Automatic VAST wrapper resolution (up to 5 levels deep)**
+- **Custom XPath parsing with xpath_specs parameter**
 - **Enhanced logging with request IDs, aggregation, and hierarchical context**
 - Integration with parser, tracker, and player
 
@@ -182,6 +263,7 @@ metrics = client.get_metrics()
 Handles VAST XML parsing with flexible configuration.
 
 **Features:**
+
 - Configurable XPath selectors
 - Error recovery with optional strict parsing
 - Multi-language support
@@ -227,6 +309,7 @@ parser = VastParser(config)
 Manages VAST tracking events with advanced capabilities.
 
 **Features:**
+
 - Event registry with list/single URL support
 - Macro substitution in tracking URLs
 - Retry mechanisms with exponential backoff
@@ -268,6 +351,7 @@ await tracker.track_event(
 Handles ad playback with automatic progress tracking.
 
 **Features:**
+
 - Real-time progress tracking
 - Quartile event detection (0%, 25%, 50%, 75%, 100%)
 - Automatic tracking integration
@@ -299,6 +383,7 @@ player.stop()
 HTTP client with embedded configuration for base URL, parameters, and headers.
 
 **Features:**
+
 - Base URL and parameter management
 - Header merging
 - URL encoding configuration
@@ -530,6 +615,7 @@ if event.should_log_event("impression"):
 The HTTP clients (main ad requests and tracking pixels) are configurable via settings to control timeouts, connection pooling, and SSL verification. Provide values in YAML or environment variables (nested keys use `__`).
 
 Example YAML (as used by middleware):
+
 ```yaml
 http:
     timeout: 30.0
@@ -547,6 +633,7 @@ http:
 ```
 
 Equivalent environment overrides:
+
 - `VAST_HTTP__TIMEOUT`, `VAST_HTTP__MAX_CONNECTIONS`, `VAST_HTTP__KEEPALIVE_EXPIRY`
 - `VAST_HTTP__VERIFY_SSL`
 - Tracking-specific: `VAST_HTTP__TRACKING__TIMEOUT`, `VAST_HTTP__TRACKING__MAX_CONNECTIONS`, `VAST_HTTP__TRACKING__VERIFY_SSL`
@@ -662,6 +749,7 @@ The package provides **enhanced logging infrastructure** with request ID correla
 ### New Logging Architecture (v1.0.0+)
 
 **Key Features:**
+
 - ✅ **Request ID Correlation** - All logs from a single operation share a unique `request_id`
 - ✅ **Hierarchical Context** - Parent-child relationships via `span_id` and `parent_id`
 - ✅ **Namespace Aggregation** - Related fields grouped under `vast_event`, `trackable`, `result`, etc.
@@ -726,6 +814,7 @@ async with LoggingContext(operation="custom_op") as ctx:
 ```
 
 **See Also:**
+
 - 📖 Full documentation: `src/vast_client/docs/LOGGING_ARCHITECTURE.md`
 - 🔬 Demo script: `examples/logging_demo.py`
 
@@ -999,7 +1088,7 @@ When extending the VAST Client package:
 
 ## References
 
-- VAST 2.0, 3.0, 4.0 Specifications: https://www.iab.com/guidelines/vast/
+- VAST 2.0, 3.0, 4.0 Specifications: <https://www.iab.com/guidelines/vast/>
 - CTV Middleware Architecture: See `../ARCHITECTURE.md`
 - Logging System: See `../../log_config/README.md`
 - HTTP Client Manager: See `../../http_client_manager.py`
