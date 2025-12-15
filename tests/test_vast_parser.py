@@ -132,5 +132,223 @@ class TestEnhancedVASTParser:
         assert result['media']['mobile'][0]['id'] == 'mf4'
 
 
+class TestEnhancedParserErrorHandling:
+    """Test error handling scenarios"""
+    
+    def test_malformed_xml_parsing(self):
+        """Test parsing with malformed XML raises appropriate error"""
+        from lxml import etree
+        
+        parser = VASTParser()
+        malformed_xml = """<?xml version="1.0"?>
+        <VAST version="4.0">
+          <Ad id="test">
+            <InLine>
+              <!-- Missing closing tag -->
+              <AdSystem>Test System
+          </Ad>
+        </VAST>"""
+        
+        # Should raise XMLSyntaxError from lxml
+        with pytest.raises(etree.XMLSyntaxError):
+            parser.parse(malformed_xml)
+    
+    def test_invalid_xpath_expression(self):
+        """Test handling of invalid XPath expressions"""
+        config = {
+            "test": {
+                "invalid": {
+                    "xpath": "//vast:InvalidXPath[[[",  # Invalid XPath syntax
+                    "merge": "append"
+                }
+            }
+        }
+        
+        parser = EnhancedVASTParser(config)
+        xml = """<?xml version="1.0"?>
+        <VAST version="4.0" xmlns="http://www.iab.com/VAST">
+          <Ad id="1"><InLine><AdSystem>Test</AdSystem></InLine></Ad>
+        </VAST>"""
+        
+        # Should handle gracefully and return empty/partial result
+        result = parser.parse(xml)
+        # Invalid XPath should be skipped, not crash
+        assert isinstance(result, dict)
+    
+    def test_empty_configuration(self):
+        """Test parser with empty configuration"""
+        parser = EnhancedVASTParser({})
+        xml = """<?xml version="1.0"?>
+        <VAST version="4.0" xmlns="http://www.iab.com/VAST">
+          <Ad id="1"><InLine><AdSystem>Test</AdSystem></InLine></Ad>
+        </VAST>"""
+        
+        result = parser.parse(xml)
+        assert result == {}
+    
+    def test_missing_configuration(self):
+        """Test parser requires configuration"""
+        # EnhancedVASTParser should accept config parameter
+        # Test with None or missing rules
+        config = {"section": {}}
+        parser = EnhancedVASTParser(config)
+        
+        xml = """<?xml version="1.0"?>
+        <VAST version="4.0" xmlns="http://www.iab.com/VAST">
+          <Ad id="1"><InLine><AdSystem>Test</AdSystem></InLine></Ad>
+        </VAST>"""
+        
+        result = parser.parse(xml)
+        assert isinstance(result, dict)
+    
+    def test_invalid_merge_strategy(self):
+        """Test handling of invalid merge strategies"""
+        config = {
+            "test": {
+                "item": {
+                    "xpath": "//vast:AdSystem/text()",
+                    "merge": "invalid_strategy",  # Not append/replace/update
+                    "target": "test.value"
+                }
+            }
+        }
+        
+        parser = EnhancedVASTParser(config)
+        xml = """<?xml version="1.0"?>
+        <VAST version="4.0" xmlns="http://www.iab.com/VAST">
+          <Ad id="1"><InLine><AdSystem>Test System</AdSystem></InLine></Ad>
+        </VAST>"""
+        
+        # Should handle gracefully - might use default or skip
+        result = parser.parse(xml)
+        assert isinstance(result, dict)
+    
+    def test_process_concat_basic(self):
+        """Test _process_concat() method with basic concatenation"""
+        config = {
+            "creatives": {
+                "media": {
+                    "xpath": "//vast:MediaFile",
+                    "merge": "append",
+                    "extract_node": True,
+                    "fields": {
+                        "descriptor": "concat(@id, '-', @bitrate)"
+                    }
+                }
+            }
+        }
+        
+        parser = EnhancedVASTParser(config)
+        xml = """<?xml version="1.0"?>
+        <VAST version="4.0" xmlns="http://www.iab.com/VAST">
+          <Ad id="1">
+            <InLine>
+              <Creatives>
+                <Creative>
+                  <Linear>
+                    <MediaFiles>
+                      <MediaFile id="mf1" bitrate="2000">https://example.com/video.mp4</MediaFile>
+                    </MediaFiles>
+                  </Linear>
+                </Creative>
+              </Creatives>
+            </InLine>
+          </Ad>
+        </VAST>"""
+        
+        result = parser.parse(xml)
+        assert 'creatives' in result
+        assert 'media' in result['creatives']
+        assert len(result['creatives']['media']) > 0
+        # Check concat worked
+        assert result['creatives']['media'][0]['descriptor'] == "mf1-2000"
+    
+    def test_process_concat_with_strings(self):
+        """Test _process_concat() with string literals"""
+        config = {
+            "test": {
+                "concat_test": {
+                    "xpath": "//vast:MediaFile",
+                    "merge": "append",
+                    "extract_node": True,
+                    "fields": {
+                        "label": "concat('File: ', @id)"
+                    }
+                }
+            }
+        }
+        
+        parser = EnhancedVASTParser(config)
+        xml = """<?xml version="1.0"?>
+        <VAST version="4.0" xmlns="http://www.iab.com/VAST">
+          <Ad id="1">
+            <InLine>
+              <Creatives>
+                <Creative>
+                  <Linear>
+                    <MediaFiles>
+                      <MediaFile id="test123">https://example.com/video.mp4</MediaFile>
+                    </MediaFiles>
+                  </Linear>
+                </Creative>
+              </Creatives>
+            </InLine>
+          </Ad>
+        </VAST>"""
+        
+        result = parser.parse(xml)
+        assert result['test']['concat_test'][0]['label'] == "File: test123"
+    
+    def test_to_json_method(self):
+        """Test to_json() method produces valid JSON"""
+        import json
+        
+        parser = EnhancedVASTParser({})
+        result_dict = {
+            "impressions": ["http://example.com/imp1"],
+            "media": {
+                "hd": [{"id": "mf1", "bitrate": 2000}]
+            }
+        }
+        
+        json_output = parser.to_json(result_dict)
+        
+        # Should be valid JSON
+        parsed = json.loads(json_output)
+        assert parsed == result_dict
+        
+        # Check formatting with indent
+        assert '\n' in json_output  # Should be pretty-printed
+    
+    def test_to_json_with_custom_indent(self):
+        """Test to_json() with custom indentation"""
+        import json
+        
+        parser = EnhancedVASTParser({})
+        result_dict = {"test": "value"}
+        
+        # Custom indent
+        json_output = parser.to_json(result_dict, indent=4)
+        parsed = json.loads(json_output)
+        assert parsed == result_dict
+    
+    def test_to_json_with_unicode(self):
+        """Test to_json() handles Unicode properly"""
+        import json
+        
+        parser = EnhancedVASTParser({})
+        result_dict = {
+            "title": "Test 中文 Тест",
+            "emoji": "🎬"
+        }
+        
+        json_output = parser.to_json(result_dict)
+        parsed = json.loads(json_output)
+        
+        # Should preserve Unicode characters
+        assert parsed["title"] == "Test 中文 Тест"
+        assert parsed["emoji"] == "🎬"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
