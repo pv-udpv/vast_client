@@ -114,7 +114,7 @@ def vast_client_config(
         enable_parsing=True,
         parser=parser_config,
         tracker=tracker_config,
-        session=session_config,
+        playback=session_config,
     )
 
 
